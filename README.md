@@ -4,16 +4,24 @@
 
 Current status: proof of concept
 
+# TODO
+
+- [x] Skeleton
+- [ ] Plugin: get HostIP and ContainerID(arbitrary one)
+- [ ] Plugin: websockets client
+- [ ] Agent: container manipulation
+- [ ] Agent: websockets relay
+
 # Design
 
 `kubectl-debug` consists of 2 components:
 
-* the kubectl plugin: a cli client of `node agent`, serves `kubectl plugin debug` command, 
+* the kubectl plugin: a cli client of `node agent`, serves `kubectl debug` command, 
 * the node agent: responsible for manipulating the "debug container"; node agent will also act as a websockets relay for remote tty
 
 General procedure:
 
-When user run `kubectl plugin debug target-pod -c <debug-container-name> /bin/bash`:
+When user run `kubectl debug target-pod -c <debug-container-name> /bin/bash`:
 
 1. The plugin get the pod info from apiserver and extract the `hostIP`, if the pod is no existed or not currently running, an error raised.
 2. The plugin send a HTTP request to the specific node agent running on the `hostIP`, which includes a protocol upgrade from HTTP to WebSockets.
@@ -33,3 +41,47 @@ Additional consideration:
 
 * What will happen if the pod exits when the debug container running in it.
 * What will happen if the debug container get killed or stuck.
+
+# Reference
+
+[sample-cli-plugin](https://github.com/kubernetes/sample-cli-plugin)
+
+[docker api](https://godoc.org/github.com/docker/docker/client)
+
+[]
+
+`kubectl exec` cli style:
+
+```
+Execute a command in a container.
+
+Examples:
+  # Get output from running 'date' from pod 123456-7890, using the first container by default
+  kubectl exec 123456-7890 date
+
+  # Get output from running 'date' in ruby-container from pod 123456-7890
+  kubectl exec 123456-7890 -c ruby-container date
+
+  # Switch to raw terminal mode, sends stdin to 'bash' in ruby-container from pod 123456-7890
+  # and sends stdout/stderr from 'bash' back to the client
+  kubectl exec 123456-7890 -c ruby-container -i -t -- bash -il
+
+  # List contents of /usr from the first container of pod 123456-7890 and sort by modification time.
+  # If the command you want to execute in the pod has any flags in common (e.g. -i),
+  # you must use two dashes (--) to separate your command's flags/arguments.
+  # Also note, do not surround your command and its flags/arguments with quotes
+  # unless that is how you would execute it normally (i.e., do ls -t /usr, not "ls -t /usr").
+  kubectl exec 123456-7890 -i -t -- ls -t /usr
+
+Options:
+  -c, --container='': Container name. If omitted, the first container in the pod will be chosen
+  -i, --stdin=false: Pass stdin to the container
+  -t, --tty=false: Stdin is a TTY
+
+Usage:
+  kubectl exec POD [-c CONTAINER] -- COMMAND [args...] [options]
+
+Use "kubectl options" for a list of global command-line options (applies to all commands).
+```
+
+

@@ -1,0 +1,6 @@
+.uptodate
+.pkg
+.cache
+*.output
+.swp
+vendor/
