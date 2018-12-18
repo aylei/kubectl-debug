@@ -12,6 +12,12 @@ Current status: proof of concept
 - [ ] Agent: container manipulation
 - [ ] Agent: websockets relay
 
+nice to have:
+
+- [ ] bash completion
+- [ ] `kubectl debug list`: list debug containers, we might need this because the debug container is not discovered by kubernetes.
+- [ ] security: security is import, but not a consideration in current stage
+
 # Design
 
 `kubectl-debug` consists of 2 components:
@@ -42,13 +48,13 @@ Additional consideration:
 * What will happen if the pod exits when the debug container running in it.
 * What will happen if the debug container get killed or stuck.
 
+`kubectl exec` might be a good example.
+
 # Reference
 
 [sample-cli-plugin](https://github.com/kubernetes/sample-cli-plugin)
 
 [docker api](https://godoc.org/github.com/docker/docker/client)
-
-[]
 
 `kubectl exec` cli style:
 
