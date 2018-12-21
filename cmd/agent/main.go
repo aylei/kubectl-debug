@@ -1,10 +1,9 @@
-package agent
+package main
 
 import (
 	"flag"
 	"github.com/aylei/kubectl-debug/pkg/agent"
-	"gopkg.in/yaml.v2"
-	"io/ioutil"
+	"log"
 	"os"
 )
 
@@ -14,27 +13,22 @@ func main() {
 	flag.StringVar(&configFile, "config.file", "debug-agent.yaml", "Config file location.")
 	flag.Parse()
 
-	if configFile == "" {
-
-	}
-	var config agent.Config
-	buf, err := ioutil.ReadFile(configFile)
+	config, err := agent.LoadFile(configFile)
 	if err != nil {
-
+		log.Fatalf("error reading config %v", err)
+		os.Exit(1)
 	}
 
-	if err := yaml.UnmarshalStrict(buf, &config); err != nil {
-
-	}
-
-	server, err := agent.NewServer(&config)
+	server, err := agent.NewServer(config)
 	if err != nil {
+		log.Fatal(err)
 		os.Exit(1)
 	}
 
 	if err := server.Run(); err != nil {
+		log.Fatal(err)
 		os.Exit(1)
 	}
 
-	server.Shutdown()
+	log.Println("sever stopped, see you next time!")
 }

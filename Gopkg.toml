@@ -12,13 +12,13 @@
   version = "0.0.3"
 
 [[constraint]]
-  name = "github.com/gorilla/websocket"
-  version = "1.4.0"
-
-[[constraint]]
   name = "github.com/docker/docker"
   version = "v17.03.2-ce"
 
 [[constraint]]
   name = "gopkg.in/yaml.v2"
   version = "2.2.1"
+
+[[override]]
+  name = "github.com/docker/docker"
+  revision = "7848b8beb9d38a98a78b75f78e05f8d2255f9dfe"
