@@ -8,9 +8,9 @@ import (
 
 var (
 	DefaultConfig = Config{
-		DockerEndpoint: "unix:///var/run/docker.sock",
-		DockerTimeout: 30 * time.Second,
-		StreamIdleTimeout: 10 * time.Minute,
+		DockerEndpoint:        "unix:///var/run/docker.sock",
+		DockerTimeout:         30 * time.Second,
+		StreamIdleTimeout:     10 * time.Minute,
 		StreamCreationTimeout: 15 * time.Second,
 
 		ListenAddress: "0.0.0.0:10027",
@@ -18,9 +18,9 @@ var (
 )
 
 type Config struct {
-	DockerEndpoint string `yaml:"docker_endpoint,omitempty"`
-	DockerTimeout time.Duration `yaml:"docker_timeout,omitempty"`
-	StreamIdleTimeout time.Duration `yaml:"stream_idle_timeout,omitempty"`
+	DockerEndpoint        string        `yaml:"docker_endpoint,omitempty"`
+	DockerTimeout         time.Duration `yaml:"docker_timeout,omitempty"`
+	StreamIdleTimeout     time.Duration `yaml:"stream_idle_timeout,omitempty"`
 	StreamCreationTimeout time.Duration `yaml:"stream_creation_timeout,omitempty"`
 
 	ListenAddress string `yaml:"listen_address,omitempty"`

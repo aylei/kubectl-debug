@@ -31,8 +31,8 @@ const (
 	# override entrypoint of debug container
 	kubectl debug POD_NAME --image aylei/debug-jvm /bin/bash
 `
-	defaultImage = "aylei/troubleshoot:latest"
-	defaultRetain = false
+	defaultImage     = "aylei/troubleshoot:latest"
+	defaultRetain    = false
 	defaultAgentPort = 10027
 )
 
@@ -45,7 +45,7 @@ type DebugOptions struct {
 
 	// Pod select options
 	Namespace string
-	PodName string
+	PodName   string
 
 	// Debug options
 	RetainContainer bool
@@ -54,10 +54,10 @@ type DebugOptions struct {
 	Command         []string
 	AgentPort       int
 
-	Flags *genericclioptions.ConfigFlags
+	Flags     *genericclioptions.ConfigFlags
 	PodClient coreclient.PodsGetter
 	Args      []string
-	Config *restclient.Config
+	Config    *restclient.Config
 
 	genericclioptions.IOStreams
 }
@@ -131,7 +131,6 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		return err
 	}
 	o.PodClient = clientset.CoreV1()
-
 
 	return nil
 }

@@ -18,7 +18,7 @@ const (
 )
 
 type Server struct {
-	config *Config
+	config     *Config
 	runtimeApi *RuntimeManager
 }
 

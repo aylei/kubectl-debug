@@ -20,7 +20,7 @@ import (
 
 // RuntimeManager is responsible for docker operation
 type RuntimeManager struct {
-	client *dockerclient.Client
+	client  *dockerclient.Client
 	timeout time.Duration
 }
 
@@ -30,7 +30,7 @@ func NewRuntimeManager(host string, timeout time.Duration) (*RuntimeManager, err
 		return nil, err
 	}
 	return &RuntimeManager{
-		client: client,
+		client:  client,
 		timeout: timeout,
 	}, nil
 }
@@ -39,7 +39,7 @@ func NewRuntimeManager(host string, timeout time.Duration) (*RuntimeManager, err
 // we use this struct in order to inject debug info (image, command) in the debug procedure
 type DebugAttacher struct {
 	runtime *RuntimeManager
-	image string
+	image   string
 	command []string
 }
 
@@ -108,16 +108,16 @@ func (m *RuntimeManager) CreateContainer(targetId string, image string, command 
 
 	config := &container.Config{
 		Entrypoint: strslice.StrSlice(command),
-		Image: image,
-		Tty: true,
-		OpenStdin: true,
-		StdinOnce: true,
+		Image:      image,
+		Tty:        true,
+		OpenStdin:  true,
+		StdinOnce:  true,
 	}
 	hostConfig := &container.HostConfig{
 		NetworkMode: container.NetworkMode(m.containerMode(targetId)),
-		UsernsMode: container.UsernsMode(m.containerMode(targetId)),
-		IpcMode: container.IpcMode(m.containerMode(targetId)),
-		PidMode: container.PidMode(m.containerMode(targetId)),
+		UsernsMode:  container.UsernsMode(m.containerMode(targetId)),
+		IpcMode:     container.IpcMode(m.containerMode(targetId)),
+		PidMode:     container.PidMode(m.containerMode(targetId)),
 	}
 	ctx, cancel := m.getTimeoutContext()
 	defer cancel()
@@ -154,7 +154,7 @@ func (m *RuntimeManager) CleanContainer(id string) {
 				log.Printf("error remove container: %s\n", id)
 			}
 		}
-	case <- statusCh:
+	case <-statusCh:
 		if err := m.RmContainer(id, false); err != nil {
 			log.Printf("error remove container: %s\n", id)
 		}
