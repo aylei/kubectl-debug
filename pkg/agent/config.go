@@ -41,6 +41,9 @@ func Load(s string) (*Config, error) {
 }
 
 func LoadFile(filename string) (*Config, error) {
+	if len(filename) < 1 {
+		return &DefaultConfig, nil
+	}
 	c, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, err

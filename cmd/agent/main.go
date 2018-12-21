@@ -10,7 +10,7 @@ import (
 func main() {
 
 	var configFile string
-	flag.StringVar(&configFile, "config.file", "debug-agent.yaml", "Config file location.")
+	flag.StringVar(&configFile, "config.file", "", "Config file location.")
 	flag.Parse()
 
 	config, err := agent.LoadFile(configFile)

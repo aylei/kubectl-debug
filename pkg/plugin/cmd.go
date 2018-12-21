@@ -203,7 +203,7 @@ func (o *DebugOptions) Run() error {
 	}
 
 	if err := t.Safe(fn); err != nil {
-		fmt.Printf("error execute remote", err)
+		fmt.Printf("error execute remote, %v\n", err)
 		return err
 	}
 

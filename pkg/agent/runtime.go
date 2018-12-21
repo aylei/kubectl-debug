@@ -55,7 +55,7 @@ func (m *RuntimeManager) GetAttacher(image string, command []string) kubeletremo
 // DebugContainer executes the main debug flow
 func (m *RuntimeManager) DebugContainer(container, image string, command []string, stdin io.Reader, stdout, stderr io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error {
 
-	log.Printf("Accept new debug reqeust:\n\t target container: %s \n\t image: %s \n\t command: %s \n", container, image, command)
+	log.Printf("Accept new debug reqeust:\n\t target container: %s \n\t image: %s \n\t command: %v \n", container, image, command)
 
 	// step 1: pull image
 	stdout.Write([]byte(fmt.Sprintf("pulling image %s ...\n\r", image)))
@@ -145,19 +145,21 @@ func (m *RuntimeManager) CleanContainer(id string) {
 	defer cancel()
 	// wait the container gracefully exit
 	statusCh, errCh := m.client.ContainerWait(ctx, id, container.WaitConditionNotRunning)
+	var rmErr error
 	select {
 	case err := <-errCh:
 		if err != nil {
 			log.Println("error waiting container exit, kill with --force")
 			// timeout or error occurs, try force remove anywawy
-			if err := m.RmContainer(id, true); err != nil {
-				log.Printf("error remove container: %s\n", id)
-			}
+			rmErr = m.RmContainer(id, true)
 		}
 	case <-statusCh:
-		if err := m.RmContainer(id, false); err != nil {
-			log.Printf("error remove container: %s\n", id)
-		}
+		rmErr = m.RmContainer(id, false)
+	}
+	if rmErr != nil {
+		log.Printf("error remove container: %s \n", id)
+	} else {
+		log.Printf("Debug session end, debug container %s removed")
 	}
 }
 
