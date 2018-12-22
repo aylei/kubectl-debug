@@ -140,14 +140,13 @@ func (o *DebugOptions) Validate() error {
 }
 
 func (o *DebugOptions) Run() error {
-	fmt.Printf("Run command, namespace: %s, podName: %s, command: %v \n\r", o.Namespace, o.PodName, o.Command)
 
 	pod, err := o.PodClient.Pods(o.Namespace).Get(o.PodName, v1.GetOptions{})
 	if err != nil {
 		return err
 	}
 	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
-		return fmt.Errorf("cannot exec into a container in a completed pod; current phase is %s", pod.Status.Phase)
+		return fmt.Errorf("cannot debug in a completed pod; current phase is %s", pod.Status.Phase)
 	}
 	hostIP := pod.Status.HostIP
 
@@ -175,6 +174,8 @@ func (o *DebugOptions) Run() error {
 		o.ErrOut = nil
 	}
 
+	hostIP = "localhost"
+	containerId = "docker://2a69a97f73720793a14a5e4bef3480a43c7c656310a100ef6260820bd872bb08"
 	fn := func() error {
 
 		// TODO: refactor as kubernetes api style, reuse rbac mechanism of kubernetes

@@ -97,11 +97,14 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 		TTY:    true,
 	}
 
+	context, cancel := context.WithCancel(req.Context())
+	defer cancel()
+
 	// replace Attacher implementation to hook the ServeAttach procedure
 	kubeletremote.ServeAttach(
 		w,
 		req,
-		s.runtimeApi.GetAttacher(image, commandSlice),
+		s.runtimeApi.GetAttacher(image, commandSlice, context, cancel),
 		"",
 		"",
 		dockerContainerId,
