@@ -14,7 +14,9 @@ import (
 	coreclient "k8s.io/client-go/kubernetes/typed/core/v1"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
+	"log"
 	"net/url"
+	"os/user"
 )
 
 const (
@@ -30,9 +32,18 @@ const (
 
 	# override entrypoint of debug container
 	kubectl debug POD_NAME --image aylei/debug-jvm /bin/bash
+
+	# override the debug config file
+	kubectl debug POD_NAME --debug-config ./debug-config.yml
 `
-	defaultImage     = "aylei/troubleshoot:latest"
-	defaultAgentPort = 10027
+	longDesc = `
+Run a container in a running pod, this container will join the namespaces of an existing container of the pod.
+
+You may set default configuration such as image and command in the config file, which locates in "~/.kube/debug-config" by default.
+`
+	defaultImage          = "nicolaka/netshoot:latest"
+	defaultAgentPort      = 10027
+	defaultConfigLocation = "/.kube/debug-config"
 )
 
 // DebugOptions specify how to run debug container in a running pod
@@ -48,6 +59,7 @@ type DebugOptions struct {
 	ContainerName   string
 	Command         []string
 	AgentPort       int
+	ConfigLocation  string
 
 	Flags     *genericclioptions.ConfigFlags
 	PodClient coreclient.PodsGetter
@@ -68,7 +80,8 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "debug POD [-c CONTAINER] -- COMMAND [args...]",
 		DisableFlagsInUseLine: true,
-		Short:   "Run a container in running pod",
+		Short:   "Run a container in a running pod",
+		Long:    longDesc,
 		Example: example,
 		Run: func(c *cobra.Command, args []string) {
 			argsLenAtDash := c.ArgsLenAtDash()
@@ -85,12 +98,14 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	}
 	//cmd.Flags().BoolVarP(&opts.RetainContainer, "retain", "r", defaultRetain,
 	//	fmt.Sprintf("Retain container after debug session closed, default to %s", defaultRetain))
-	cmd.Flags().StringVar(&opts.Image, "image", defaultImage,
+	cmd.Flags().StringVar(&opts.Image, "image", "",
 		fmt.Sprintf("Container Image to run the debug container, default to %s", defaultImage))
 	cmd.Flags().StringVarP(&opts.ContainerName, "container", "c", "",
 		"Target container to debug, default to the first container in pod")
-	cmd.Flags().IntVarP(&opts.AgentPort, "port", "p", defaultAgentPort,
+	cmd.Flags().IntVarP(&opts.AgentPort, "port", "p", 0,
 		fmt.Sprintf("Agent port for debug cli to connect, default to %d", defaultAgentPort))
+	cmd.Flags().StringVar(&opts.ConfigLocation, "debug-config", "",
+		fmt.Sprintf("Debug config file, default to ~%s", defaultConfigLocation))
 	opts.Flags.AddFlags(cmd.Flags())
 
 	return cmd
@@ -102,18 +117,52 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 	if len(args) == 0 {
 		return fmt.Errorf("error pod not specified")
 	}
-	o.PodName = args[0]
-	o.Command = args[1:]
-	if len(o.Command) < 1 {
-		// default command is guaranteed in default container
-		o.Command = []string{"bash"}
-	}
 
 	var err error
 	configLoader := o.Flags.ToRawKubeConfigLoader()
 	o.Namespace, _, err = configLoader.Namespace()
 	if err != nil {
 		return err
+	}
+
+	o.PodName = args[0]
+
+	// read defaults from config file
+	configFile := o.ConfigLocation
+	if len(o.ConfigLocation) < 1 {
+		usr, err := user.Current()
+		if err == nil {
+			configFile = usr.HomeDir + defaultConfigLocation
+		}
+	}
+	config, err := LoadFile(configFile)
+	if err != nil {
+		log.Println("error loading file ", err)
+		config = &Config{}
+	}
+
+	// combine defaults, config file and user parameters
+	o.Command = args[1:]
+	if len(o.Command) < 1 {
+		if len(config.Command) > 0 {
+			o.Command = config.Command
+		} else {
+			o.Command = []string{"bash"}
+		}
+	}
+	if len(o.Image) < 1 {
+		if len(config.Image) > 0 {
+			o.Image = config.Image
+		} else {
+			o.Image = defaultImage
+		}
+	}
+	if o.AgentPort < 1 {
+		if config.AgentPort > 0 {
+			o.AgentPort = config.AgentPort
+		} else {
+			o.AgentPort = defaultAgentPort
+		}
 	}
 
 	o.Config, err = configLoader.ClientConfig()
@@ -174,8 +223,6 @@ func (o *DebugOptions) Run() error {
 		o.ErrOut = nil
 	}
 
-	hostIP = "localhost"
-	containerId = "docker://2a69a97f73720793a14a5e4bef3480a43c7c656310a100ef6260820bd872bb08"
 	fn := func() error {
 
 		// TODO: refactor as kubernetes api style, reuse rbac mechanism of kubernetes

@@ -181,7 +181,7 @@ func (m *DebugAttacher) PullImage(image string, stdout io.WriteCloser) error {
 	}
 	defer out.Close()
 	// write pull progress to user
-	term.DisplayDockerJsonStream(out, stdout)
+	term.DisplayJSONMessagesStream(out, stdout, 1, true, nil)
 	return nil
 }
 
