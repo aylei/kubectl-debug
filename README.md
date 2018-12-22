@@ -20,8 +20,17 @@ kubectl apply -f https://raw.githubusercontent.com/aylei/kubectl-debug/master/sc
 
 Install the kubectl debug plugin:
 ```bash
-curl 
+# Linux
+curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/0.0.1/kubectl-debug_0.0.1_linux-amd64
+
+# MacOS
+curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/0.0.1/kubectl-debug_0.0.1_macos-amd64
+
+chmod +x ./kubectl-debug
+mv kubectdl-debug /usr/local/bin/
 ```
+
+For windows user, download the latest binary from the [release page](https://github.com/aylei/kubectl-debug/releases/tag/0.0.1) and add it to your PATH.
 
 Try it out!
 ```bash
@@ -86,4 +95,4 @@ When user run `kubectl debug target-pod -c <container-name> /bin/bash`:
 
 # Contribute
 
-Feel free to open issues and pull requests. Any feedback will be highly appreciated!
+Feel free to open issues and pull requests. Any feedback is highly appreciated!

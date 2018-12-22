@@ -13,6 +13,18 @@ kubectl apply -f https://raw.githubusercontent.com/aylei/kubectl-debug/master/sc
 
 接下来, 安装 kubectl 插件:
 
+```bash
+# Linux
+curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/0.0.1/kubectl-debug_0.0.1_linux-amd64
+
+# MacOS
+curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/0.0.1/kubectl-debug_0.0.1_macos-amd64
+
+chmod +x ./kubectl-debug
+mv kubectdl-debug /usr/local/bin/
+```
+
+Windows 上可以到 [release page](https://github.com/aylei/kubectl-debug/releases/tag/0.0.1) 下载最新的 binary (_win-amd64结尾) 然后加入 PATH.
 
 装完之后就可以试试看了:
 ```bash
