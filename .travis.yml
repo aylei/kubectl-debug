@@ -30,6 +30,6 @@ before_deploy:
 
 deploy:
   - provider: script
-    script: bash docker_push.sh
+    script: bash ./scripts/docker_push.sh
     on:
       tags: true

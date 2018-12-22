@@ -49,7 +49,7 @@ func (a *DebugAttacher) AttachContainer(name string, uid kubetype.UID, container
 
 // GetAttacher returns an implementation of Attacher
 func (m *RuntimeManager) GetAttacher(image string, command []string) kubeletremote.Attacher {
-	return &DebugAttacher{runtime: m, image: image}
+	return &DebugAttacher{runtime: m, image: image, command: command}
 }
 
 // DebugContainer executes the main debug flow
@@ -59,7 +59,7 @@ func (m *RuntimeManager) DebugContainer(container, image string, command []strin
 
 	// step 1: pull image
 	stdout.Write([]byte(fmt.Sprintf("pulling image %s ...\n\r", image)))
-	err := m.PullImage(image)
+	err := m.PullImage(image, stdout)
 	if err != nil {
 		return err
 	}
@@ -128,16 +128,17 @@ func (m *RuntimeManager) CreateContainer(targetId string, image string, command 
 	return &body, nil
 }
 
-func (m *RuntimeManager) PullImage(image string) error {
+func (m *RuntimeManager) PullImage(image string, stdout io.WriteCloser) error {
 	ctx, cancel := m.getTimeoutContext()
 	defer cancel()
-	resp, err := m.client.ImagePull(ctx, image, types.ImagePullOptions{})
+	out, err := m.client.ImagePull(ctx, image, types.ImagePullOptions{})
 	if err != nil {
 		return err
 	}
-	defer resp.Close()
+	defer out.Close()
+	// write pull progress to user
+	io.Copy(stdout, out)
 	return nil
-
 }
 
 func (m *RuntimeManager) CleanContainer(id string) {

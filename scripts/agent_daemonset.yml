@@ -1,0 +1,46 @@
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  labels:
+    app: debug-agent
+  name: debug-agent
+spec:
+  selector:
+    matchLabels:
+      app: debug-agent
+  template:
+    metadata:
+      labels:
+        app: debug-agent
+    spec:
+      containers:
+      - image: aylei/debug-agent:latest
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: 10027
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: debug-agent
+        ports:
+        - containerPort: 10027
+          hostPort: 10027
+          name: http
+          protocol: TCP
+        volumeMounts:
+        - name: docker
+          mountPath: "/var/run/docker.sock"
+      hostNetwork: true
+      volumes:
+      - name: docker
+        hostPath:
+          path: /var/run/docker.sock
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 5
+    type: RollingUpdate

@@ -97,7 +97,6 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 		TTY:    true,
 	}
 
-	log.Printf("start serve attach, id: %s, image: %s, command: %v \n", containerId, image, commandSlice)
 	// replace Attacher implementation to hook the ServeAttach procedure
 	kubeletremote.ServeAttach(
 		w,
