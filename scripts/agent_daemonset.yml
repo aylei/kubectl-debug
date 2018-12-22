@@ -14,7 +14,7 @@ spec:
         app: debug-agent
     spec:
       containers:
-      - image: registry.qunhequnhe.com/monitor/debug-agent:0.0.5
+      - image: aylei/debug-agent:0.0.1
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 3

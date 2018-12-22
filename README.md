@@ -30,6 +30,25 @@ kubectl debug POD_NAME
 kubectl debug -h
 ```
 
+# Build from source
+
+Clone this repo and:
+```bash
+# build plugin
+go build -o kubectl-debug ./cmd/plugin
+# install plugin
+mv kubectl-debug /usr/local/bin
+
+# build agent
+go build -o debug-agent ./cmd/agent
+# build agent image
+docker build . -t debug-agent
+```
+
+# Demo
+
+[![asciicast](https://asciinema.org/a/yswc937xUwvnIMRpvJSNJLJj7.png)](https://asciinema.org/a/yswc937xUwvnIMRpvJSNJLJj7)
+
 # Default image and entrypoint
 
 `kubectl-debug` use [nicolaka/netshoot](https://github.com/nicolaka/netshoot) as the default image to run debug container, and use `bash` as default entrypoint.
