@@ -159,7 +159,7 @@ func (m *RuntimeManager) CleanContainer(id string) {
 	if rmErr != nil {
 		log.Printf("error remove container: %s \n", id)
 	} else {
-		log.Printf("Debug session end, debug container %s removed")
+		log.Printf("Debug session end, debug container %s removed", id)
 	}
 }
 

@@ -32,12 +32,7 @@ const (
 	kubectl debug POD_NAME --image aylei/debug-jvm /bin/bash
 `
 	defaultImage     = "aylei/troubleshoot:latest"
-	defaultRetain    = false
 	defaultAgentPort = 10027
-)
-
-var (
-	errNoContext = fmt.Errorf("no context is currently set, use %q to select a new one", "kubectl config use-context <context>")
 )
 
 // DebugOptions specify how to run debug container in a running pod
@@ -86,7 +81,6 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 			if err := opts.Run(); err != nil {
 				fmt.Println(err)
 			}
-			return
 		},
 	}
 	//cmd.Flags().BoolVarP(&opts.RetainContainer, "retain", "r", defaultRetain,
@@ -212,6 +206,9 @@ func (o *DebugOptions) Run() error {
 
 func (o *DebugOptions) getContainerIdByName(pod *corev1.Pod, containerName string) (string, error) {
 	for _, containerStatus := range pod.Status.ContainerStatuses {
+		if containerStatus.Name != containerName {
+			continue
+		}
 		if !containerStatus.Ready {
 			return "", fmt.Errorf("container %s id not ready", containerName)
 		}
