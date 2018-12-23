@@ -5,13 +5,27 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/aylei/kubectl-debug)](https://goreportcard.com/report/github.com/aylei/kubectl-debug)
 [![docker](https://img.shields.io/docker/pulls/aylei/debug-agent.svg)](https://hub.docker.com/r/aylei/debug-agent)
 
-[中文文档](./docs/zh-cn.md)
+[中文](./docs/zh-cn.md)
+
+# Overview
 
 `kubectl-debug` is an out-of-tree solution for [troubleshooting running pods](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/node/troubleshoot-running-pods.md), which allows you to run a new container in running pods for debugging purpose. The new container will join the `pid`, `network`, `user` and `ipc` namespaces of the target container, so you can use arbitrary trouble-shooting tools without pre-install them in your production container image.
 
-> Compatibility: I've tested `kubectl-debug` with kubectl v1.13.1 and kubernetes v1.9.1. I don't have an environment to test more versions but I suppose that `kubectl-debug` is compatible with all versions of kubernetes and kubectl 1.12.0+. Please [file an issue](https://github.com/aylei/kubectl-debug/issues/new) if you find `kubectl-debug` do not work.
+- [demo](#demo)
+- [quick start](#quick-start)
+- [build from source](#build-from-source)
+- [default image and entrypoints](#default-image-and-entrypoint)
+- [future works](#future-works)
+- [implementation details](#details)
+- [contribute](#contribute)
+
+# Demo
+
+![gif](./docs/kube-debug.gif)
 
 # Quick Start
+
+`kubectl-debug` is pretty simple, give it a try!
 
 Install the debug agent DaemonSet in your cluster, which is responsible to run the "new container":
 ```bash
@@ -39,6 +53,8 @@ kubectl debug POD_NAME
 kubectl debug -h
 ```
 
+> Compatibility: I've tested `kubectl-debug` with kubectl v1.13.1 and kubernetes v1.9.1. I don't have an environment to test more versions but I suppose that `kubectl-debug` is compatible with all versions of kubernetes and kubectl 1.12.0+. Please [file an issue](https://github.com/aylei/kubectl-debug/issues/new) if you find `kubectl-debug` do not work.
+
 # Build from source
 
 Clone this repo and:
@@ -53,10 +69,6 @@ go build -o debug-agent ./cmd/agent
 # build agent image
 docker build . -t debug-agent
 ```
-
-# Demo
-
-[![asciicast](https://asciinema.org/a/yswc937xUwvnIMRpvJSNJLJj7.png)](https://asciinema.org/a/yswc937xUwvnIMRpvJSNJLJj7)
 
 # Default image and entrypoint
 
@@ -73,6 +85,13 @@ command:
 ```
 
 PS: `kubectl-debug` will always override the entrypoint of the container, which is by design to avoid users running an unwanted service by mistake(of course you can always do this explicitly).
+
+# Future works
+
+`kubectl-debug` is supposed to be just a troubleshooting helper, and is going be replaced by the native `kubectl debug` command when [this proposal](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/node/troubleshoot-running-pods.md) is implemented and merged in the future kubernetes release. But for now, there is still some works to do to improve `kubectl-debug`.
+
+- [ ] Security. `kubectl-debug` runs privileged agent on every node, and client talks to the agent directly. A possible solution is introducing a central apiserver to do RBAC, which integrates to the kube apiserver using [aggregation layer](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/apiserver-aggregation/)
+- [ ] Protocol. `kubectl-debug` vendor the SPDY wrapper from `client-go`. SPDY is deprecated now, websockets maybe a better choice
 
 # Details
 
