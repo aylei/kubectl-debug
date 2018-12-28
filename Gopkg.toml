@@ -22,3 +22,7 @@
 [[override]]
   name = "github.com/docker/docker"
   revision = "7848b8beb9d38a98a78b75f78e05f8d2255f9dfe"
+
+[[constraint]]
+  name = "k8s.io/client-go"
+  version = "10.0.0"
