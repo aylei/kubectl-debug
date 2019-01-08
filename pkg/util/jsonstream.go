@@ -197,7 +197,7 @@ func (jm *JSONMessage) Display(out io.Writer, termInfo termInfo) error {
 	endl := "\r"
 	if termInfo != nil && jm.Stream == "" && jm.Progress != nil {
 		clearLine(out, termInfo)
-		fmt.Fprintf(out, endl)
+		fmt.Fprint(out, endl)
 	} else if jm.Progress != nil && jm.Progress.String() != "" { //disable progressbar in non-terminal
 		return nil
 	}

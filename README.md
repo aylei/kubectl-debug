@@ -41,16 +41,20 @@ curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/
 curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/0.0.1/kubectl-debug_0.0.1_macos-amd64
 
 chmod +x ./kubectl-debug
-mv kubectdl-debug /usr/local/bin/
+mv kubectl-debug /usr/local/bin/
 ```
 
 For windows user, download the latest binary from the [release page](https://github.com/aylei/kubectl-debug/releases/tag/0.0.1) and add it to your PATH.
 
 Try it out!
 ```bash
+# kubectl 1.12.0 or higher
 kubectl debug POD_NAME
 # learn more with 
 kubectl debug -h
+
+# old versions of kubectl
+kubect-debug POD_NAME
 ```
 
 > Compatibility: I've tested `kubectl-debug` with kubectl v1.13.1 and kubernetes v1.9.1. I don't have an environment to test more versions but I suppose that `kubectl-debug` is compatible with all versions of kubernetes and kubectl 1.12.0+. Please [file an issue](https://github.com/aylei/kubectl-debug/issues/new) if you find `kubectl-debug` do not work.
