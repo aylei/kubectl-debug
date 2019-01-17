@@ -13,10 +13,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/watch"
 	coreclient "k8s.io/client-go/kubernetes/typed/core/v1"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
+	"k8s.io/client-go/tools/watch"
 	"k8s.io/kubernetes/pkg/client/conditions"
 	"k8s.io/kubernetes/pkg/util/interrupt"
 	"log"
@@ -222,8 +222,11 @@ func (o *DebugOptions) Run() error {
 			return err
 		}
 		watcher, err := o.CoreClient.Pods(pod.Namespace).Watch(v1.SingleObject(pod.ObjectMeta))
+		if err != nil {
+			return err
+		}
 		// FIXME: hard code -> config
-		ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 		log.Println("waiting for forked container running...")
 		event, err := watch.UntilWithoutRetry(ctx, watcher, conditions.PodRunning)
@@ -284,7 +287,7 @@ func (o *DebugOptions) Run() error {
 					log.Printf("failed to delete pod %s, consider manual deletion.", pod.Name)
 				}
 			}
-		}).Run(fn);
+		}).Run(fn)
 	}
 
 	if err := t.Safe(withCleanUp); err != nil {
@@ -379,4 +382,3 @@ func copyAndStripPod(pod *corev1.Pod, targetContainer string) *corev1.Pod {
 
 	return copied
 }
-
