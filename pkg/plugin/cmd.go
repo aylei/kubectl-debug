@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/aylei/kubectl-debug/pkg/util"
@@ -9,14 +10,19 @@ import (
 	"io"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 	coreclient "k8s.io/client-go/kubernetes/typed/core/v1"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
+	"k8s.io/client-go/tools/watch"
+	"k8s.io/kubernetes/pkg/client/conditions"
+	"k8s.io/kubernetes/pkg/util/interrupt"
 	"log"
 	"net/url"
 	"os/user"
+	"time"
 )
 
 const (
@@ -54,17 +60,17 @@ type DebugOptions struct {
 	PodName   string
 
 	// Debug options
-	RetainContainer bool
-	Image           string
-	ContainerName   string
-	Command         []string
-	AgentPort       int
-	ConfigLocation  string
+	Image          string
+	ContainerName  string
+	Command        []string
+	AgentPort      int
+	ConfigLocation string
+	Fork           bool
 
-	Flags     *genericclioptions.ConfigFlags
-	PodClient coreclient.PodsGetter
-	Args      []string
-	Config    *restclient.Config
+	Flags      *genericclioptions.ConfigFlags
+	CoreClient coreclient.CoreV1Interface
+	Args       []string
+	Config     *restclient.Config
 
 	genericclioptions.IOStreams
 }
@@ -106,6 +112,8 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		fmt.Sprintf("Agent port for debug cli to connect, default to %d", defaultAgentPort))
 	cmd.Flags().StringVar(&opts.ConfigLocation, "debug-config", "",
 		fmt.Sprintf("Debug config file, default to ~%s", defaultConfigLocation))
+	cmd.Flags().BoolVar(&opts.Fork, "fork", false,
+		"Fork a new pod for debugging (useful if the pod status is CrashLoopBackoff)")
 	opts.Flags.AddFlags(cmd.Flags())
 
 	return cmd
@@ -173,7 +181,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 	if err != nil {
 		return err
 	}
-	o.PodClient = clientset.CoreV1()
+	o.CoreClient = clientset.CoreV1()
 
 	return nil
 }
@@ -190,14 +198,10 @@ func (o *DebugOptions) Validate() error {
 
 func (o *DebugOptions) Run() error {
 
-	pod, err := o.PodClient.Pods(o.Namespace).Get(o.PodName, v1.GetOptions{})
+	pod, err := o.CoreClient.Pods(o.Namespace).Get(o.PodName, v1.GetOptions{})
 	if err != nil {
 		return err
 	}
-	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
-		return fmt.Errorf("cannot debug in a completed pod; current phase is %s", pod.Status.Phase)
-	}
-	hostIP := pod.Status.HostIP
 
 	containerName := o.ContainerName
 	if len(containerName) == 0 {
@@ -207,6 +211,35 @@ func (o *DebugOptions) Run() error {
 		}
 		containerName = pod.Spec.Containers[0].Name
 	}
+
+	// in fork mode, we launch an new pod as a copy of target pod
+	// and hack the entry point of the target container with sleep command
+	// which keeps the container running.
+	if o.Fork {
+		pod = copyAndStripPod(pod, containerName)
+		pod, err = o.CoreClient.Pods(pod.Namespace).Create(pod)
+		if err != nil {
+			return err
+		}
+		watcher, err := o.CoreClient.Pods(pod.Namespace).Watch(v1.SingleObject(pod.ObjectMeta))
+		if err != nil {
+			return err
+		}
+		// FIXME: hard code -> config
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		log.Println("waiting for forked container running...")
+		event, err := watch.UntilWithoutRetry(ctx, watcher, conditions.PodRunning)
+		if err != nil {
+			return err
+		}
+		pod = event.Object.(*corev1.Pod)
+	}
+
+	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
+		return fmt.Errorf("cannot debug in a completed pod; current phase is %s", pod.Status.Phase)
+	}
+	hostIP := pod.Status.HostIP
 
 	containerId, err := o.getContainerIdByName(pod, containerName)
 	if err != nil {
@@ -244,7 +277,20 @@ func (o *DebugOptions) Run() error {
 		return o.remoteExecute("POST", uri, o.Config, o.In, o.Out, o.ErrOut, t.Raw, sizeQueue)
 	}
 
-	if err := t.Safe(fn); err != nil {
+	// ensure forked pod is deleted on cancelation
+	withCleanUp := func() error {
+		return interrupt.Chain(nil, func() {
+			if o.Fork {
+				err := o.CoreClient.Pods(pod.Namespace).Delete(pod.Name, v1.NewDeleteOptions(0))
+				if err != nil {
+					// we may leak pod here, but we have nothing to do except noticing the user
+					log.Printf("failed to delete pod %s, consider manual deletion.", pod.Name)
+				}
+			}
+		}).Run(fn)
+	}
+
+	if err := t.Safe(withCleanUp); err != nil {
 		fmt.Printf("error execute remote, %v\n", err)
 		return err
 	}
@@ -307,4 +353,32 @@ func (o *DebugOptions) setupTTY() term.TTY {
 		t.Out = stdout
 	}
 	return t
+}
+
+// copyAndStripPod copy the given pod template, strip the probes and labels,
+// and replace the entry point
+func copyAndStripPod(pod *corev1.Pod, targetContainer string) *corev1.Pod {
+	copied := &corev1.Pod{
+		ObjectMeta: *pod.ObjectMeta.DeepCopy(),
+		Spec:       *pod.Spec.DeepCopy(),
+	}
+	copied.Name = fmt.Sprintf("%s-%s-debug", pod.Name, uuid.NewUUID())
+	copied.Labels = nil
+	copied.Spec.RestartPolicy = corev1.RestartPolicyNever
+	for i, c := range copied.Spec.Containers {
+		copied.Spec.Containers[i].LivenessProbe = nil
+		copied.Spec.Containers[i].ReadinessProbe = nil
+		if c.Name == targetContainer {
+			// Hack, infinite sleep command to keep the container running
+			copied.Spec.Containers[i].Command = []string{"sh", "-c", "--"}
+			copied.Spec.Containers[i].Args = []string{"while true; do sleep 30; done;"}
+		}
+	}
+	copied.ResourceVersion = ""
+	copied.UID = ""
+	copied.SelfLink = ""
+	copied.CreationTimestamp = v1.Time{}
+	copied.OwnerReferences = []v1.OwnerReference{}
+
+	return copied
 }
