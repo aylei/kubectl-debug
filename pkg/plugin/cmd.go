@@ -304,10 +304,22 @@ func (o *DebugOptions) getContainerIdByName(pod *corev1.Pod, containerName strin
 			continue
 		}
 		if !containerStatus.Ready {
-			return "", fmt.Errorf("container %s id not ready", containerName)
+			return "", fmt.Errorf("container [%s] not ready", containerName)
 		}
 		return containerStatus.ContainerID, nil
 	}
+
+	// #14 otherwise we should for running search init containers
+	for _, initContainerStatus := range pod.Status.InitContainerStatuses {
+		if initContainerStatus.Name != containerName {
+			continue
+		}
+		if initContainerStatus.State.Running == nil {
+			return "", fmt.Errorf("init container [%s] is not running", containerName)
+		}
+		return initContainerStatus.ContainerID, nil
+	}
+
 	return "", fmt.Errorf("cannot find specified container %s", containerName)
 }
 
