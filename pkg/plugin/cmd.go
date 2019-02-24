@@ -309,7 +309,7 @@ func (o *DebugOptions) getContainerIdByName(pod *corev1.Pod, containerName strin
 		return containerStatus.ContainerID, nil
 	}
 
-	// #14 otherwise we should for running search init containers
+	// #14 otherwise we should search for running init containers
 	for _, initContainerStatus := range pod.Status.InitContainerStatuses {
 		if initContainerStatus.Name != containerName {
 			continue
