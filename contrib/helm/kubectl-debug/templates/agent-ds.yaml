@@ -1,0 +1,68 @@
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: {{ template "kubectl-debug.fullname" . }}-agent
+  labels:
+    app: {{ template "kubectl-debug.name" . }}-agent
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "kubectl-debug.name" . }}-agent
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "kubectl-debug.name" . }}-agent
+    spec:
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+      {{- range .Values.image.pullSecrets }}
+        - name: {{ . }}
+      {{- end}}
+      {{- end }}
+      containers:
+      - image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.livenessProbe.port }}
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+        name: {{ template "kubectl-debug.fullname" . }}-agent
+        ports:
+        - containerPort: 10027
+          hostPort: 10027
+          name: http
+          protocol: TCP
+        volumeMounts:
+        - name: docker
+          mountPath: "/var/run/docker.sock"
+      hostNetwork: true
+      volumes:
+      - name: docker
+        hostPath:
+          path: /var/run/docker.sock
+    {{- if .ValuesnodeSelector }}
+      nodeSelector:
+{{ toYaml .ValuesnodeSelector | indent 8 }}
+    {{- end }}
+    {{- if .Valuestolerations }}
+      tolerations:
+{{ toYaml .Valuestolerations | indent 8 }}
+    {{- end }}
+    {{- if .Valuesaffinity }}
+      affinity:
+{{ toYaml .Valuesaffinity | indent 8 }}
+    {{- end }}
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 5
+    type: RollingUpdate
