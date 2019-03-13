@@ -41,7 +41,7 @@ curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/
 curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/0.0.1/kubectl-debug_0.0.1_macos-amd64
 
 chmod +x ./kubectl-debug
-mv kubectl-debug /usr/local/bin/
+sudo mv kubectl-debug /usr/local/bin/
 ```
 
 For windows users, download the latest binary from the [release page](https://github.com/aylei/kubectl-debug/releases/tag/0.0.1) and add it to your PATH.
