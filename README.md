@@ -35,16 +35,16 @@ kubectl apply -f https://raw.githubusercontent.com/aylei/kubectl-debug/master/sc
 Install the kubectl debug plugin:
 ```bash
 # Linux
-curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/0.0.1/kubectl-debug_0.0.1_linux-amd64
+curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/0.0.2/kubectl-debug_0.0.2_linux-amd64
 
 # MacOS
-curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/0.0.1/kubectl-debug_0.0.1_macos-amd64
+curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/0.0.2/kubectl-debug_0.0.2_macos-amd64
 
 chmod +x ./kubectl-debug
 sudo mv kubectl-debug /usr/local/bin/
 ```
 
-For windows users, download the latest binary from the [release page](https://github.com/aylei/kubectl-debug/releases/tag/0.0.1) and add it to your PATH.
+For windows users, download the latest binary from the [release page](https://github.com/aylei/kubectl-debug/releases/tag/0.0.2) and add it to your PATH.
 
 Try it out!
 ```bash
