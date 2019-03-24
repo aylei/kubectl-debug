@@ -81,6 +81,14 @@
   version = "v0.1.0"
 
 [[projects]]
+  digest = "1:0deddd908b6b4b768cfc272c16ee61e7088a60f7fe2f06c547bd3d8e1f8b8e77"
+  name = "github.com/davecgh/go-spew"
+  packages = ["spew"]
+  pruneopts = ""
+  revision = "8991bc29aa16c548c550c7ff78260e27b9ab7c73"
+  version = "v1.1.1"
+
+[[projects]]
   digest = "1:6098222470fe0172157ce9bbef5d2200df4edde17ee649c5d6e48330e4afa4c6"
   name = "github.com/dgrijalva/jwt-go"
   packages = ["."]
@@ -210,6 +218,14 @@
   revision = "24818f796faf91cd76ec7bddd72458fbced7a6c1"
 
 [[projects]]
+  digest = "1:ad92aa49f34cbc3546063c7eb2cabb55ee2278b72842eda80e2a20a8a06a8d73"
+  name = "github.com/google/uuid"
+  packages = ["."]
+  pruneopts = ""
+  revision = "0cd6bf5da1e1c83f8b45653022c74f71af0538a4"
+  version = "v1.1.1"
+
+[[projects]]
   digest = "1:16b2837c8b3cf045fa2cdc82af0cf78b19582701394484ae76b2c3bc3c99ad73"
   name = "github.com/googleapis/gnostic"
   packages = [
@@ -247,6 +263,17 @@
   ]
   pruneopts = ""
   revision = "c63ab54fda8f77302f8d414e19933f2b6026a089"
+
+[[projects]]
+  digest = "1:85f8f8d390a03287a563e215ea6bd0610c858042731a8b42062435a0dcbc485f"
+  name = "github.com/hashicorp/golang-lru"
+  packages = [
+    ".",
+    "simplelru",
+  ]
+  pruneopts = ""
+  revision = "7087cb70de9f7a8bc0a10c375cb0d2280a8edf9c"
+  version = "v0.5.1"
 
 [[projects]]
   digest = "1:7ab38c15bd21e056e3115c8b526d201eaf74e0308da9370997c6b3c187115d36"
@@ -322,6 +349,14 @@
   pruneopts = ""
   revision = "d60099175f88c47cd379c4738d158884749ed235"
   version = "v1.0.1"
+
+[[projects]]
+  digest = "1:a5484d4fa43127138ae6e7b2299a6a52ae006c7f803d98d717f60abf3e97192e"
+  name = "github.com/pborman/uuid"
+  packages = ["."]
+  pruneopts = ""
+  revision = "adf5a7427709b9deb95d29d3fa8a2bf9cfd388f1"
+  version = "v1.2"
 
 [[projects]]
   branch = "master"
@@ -670,8 +705,7 @@
   revision = "d04500c8c3dda9c980b668c57abc2ca61efcf5c4"
 
 [[projects]]
-  branch = "master"
-  digest = "1:c104c9d2d26b85af4923c7c7dd85ed5d877087c3e5e260f73c709f67b64a353e"
+  digest = "1:c05610391a133b223e1736a3b8cbd725da30f64c0c6a93d6422714ccfd8f4a73"
   name = "k8s.io/apimachinery"
   packages = [
     "pkg/api/errors",
@@ -696,7 +730,9 @@
     "pkg/runtime/serializer/versioning",
     "pkg/selection",
     "pkg/types",
+    "pkg/util/cache",
     "pkg/util/clock",
+    "pkg/util/diff",
     "pkg/util/errors",
     "pkg/util/framer",
     "pkg/util/httpstream",
@@ -708,8 +744,10 @@
     "pkg/util/remotecommand",
     "pkg/util/runtime",
     "pkg/util/sets",
+    "pkg/util/uuid",
     "pkg/util/validation",
     "pkg/util/validation/field",
+    "pkg/util/wait",
     "pkg/util/yaml",
     "pkg/version",
     "pkg/watch",
@@ -717,7 +755,8 @@
     "third_party/forked/golang/reflect",
   ]
   pruneopts = ""
-  revision = "4d029f0333996cf231080e108e0bd1ece2a94d9f"
+  revision = "86fb29eff6288413d76bd8506874fddd9fccdff0"
+  version = "kubernetes-1.13.4"
 
 [[projects]]
   branch = "master"
@@ -731,8 +770,7 @@
   revision = "ce7b605bead3751ccde20b7e5b3b53e87336c3b0"
 
 [[projects]]
-  branch = "master"
-  digest = "1:5e656ab1f3dbe230bbe5e6ad7c2f2ca6b420241b59461d0e69b6a2172b5ed253"
+  digest = "1:f03f595d63b795ac81354127d77f1a901ca663d15267d484187940f5ece60c59"
   name = "k8s.io/cli-runtime"
   packages = [
     "pkg/genericclioptions",
@@ -740,11 +778,12 @@
     "pkg/genericclioptions/resource",
   ]
   pruneopts = ""
-  revision = "2f0d1d0a58f22eae7a0ec3d6cf01f4a122a57dae"
+  revision = "a9e421a7932607ce4623ff45add8274499cca193"
   source = "github.com/kubernetes/cli-runtime"
+  version = "kubernetes-1.13.4"
 
 [[projects]]
-  digest = "1:96ab89894f66b77a0137bba12e607c6a9be992acadfb075b5602939e8519a157"
+  digest = "1:12c43154153575abb595eb35ba6c3f42ae1e3192b4a184dda640b2a1b4f930d0"
   name = "k8s.io/client-go"
   packages = [
     "discovery",
@@ -797,15 +836,19 @@
     "restmapper",
     "third_party/forked/golang/template",
     "tools/auth",
+    "tools/cache",
     "tools/clientcmd",
     "tools/clientcmd/api",
     "tools/clientcmd/api/latest",
     "tools/clientcmd/api/v1",
     "tools/metrics",
+    "tools/pager",
     "tools/reference",
     "tools/remotecommand",
+    "tools/watch",
     "transport",
     "transport/spdy",
+    "util/buffer",
     "util/cert",
     "util/connrotation",
     "util/exec",
@@ -813,10 +856,11 @@
     "util/homedir",
     "util/integer",
     "util/jsonpath",
+    "util/retry",
   ]
   pruneopts = ""
-  revision = "e64494209f554a6723674bd494d69445fb76a1d4"
-  version = "v10.0.0"
+  revision = "b40b2a5939e43f7ffe0028ad67586b7ce50bb675"
+  version = "kubernetes-1.13.4"
 
 [[projects]]
   digest = "1:4f5eb833037cc0ba0bf8fe9cae6be9df62c19dd1c869415275c708daa8ccfda5"
@@ -831,6 +875,7 @@
   name = "k8s.io/kubernetes"
   packages = [
     "pkg/apis/core",
+    "pkg/client/conditions",
     "pkg/kubelet/dockershim/libdocker",
     "pkg/kubelet/dockershim/metrics",
     "pkg/kubelet/server/remotecommand",
@@ -877,12 +922,15 @@
     "k8s.io/apimachinery/pkg/types",
     "k8s.io/apimachinery/pkg/util/remotecommand",
     "k8s.io/apimachinery/pkg/util/runtime",
+    "k8s.io/apimachinery/pkg/util/uuid",
     "k8s.io/cli-runtime/pkg/genericclioptions",
     "k8s.io/client-go/kubernetes",
     "k8s.io/client-go/kubernetes/typed/core/v1",
     "k8s.io/client-go/plugin/pkg/client/auth",
     "k8s.io/client-go/rest",
     "k8s.io/client-go/tools/remotecommand",
+    "k8s.io/client-go/tools/watch",
+    "k8s.io/kubernetes/pkg/client/conditions",
     "k8s.io/kubernetes/pkg/kubelet/dockershim/libdocker",
     "k8s.io/kubernetes/pkg/kubelet/server/remotecommand",
     "k8s.io/kubernetes/pkg/util/interrupt",
