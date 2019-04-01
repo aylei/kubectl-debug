@@ -4,25 +4,32 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/aylei/kubectl-debug/pkg/util"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
+	"os/user"
+	"strconv"
+	"sync"
+	"time"
+
+	term "github.com/aylei/kubectl-debug/pkg/util"
 	dockerterm "github.com/docker/docker/pkg/term"
 	"github.com/spf13/cobra"
-	"io"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 	coreclient "k8s.io/client-go/kubernetes/typed/core/v1"
 	restclient "k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/client-go/tools/watch"
+	"k8s.io/client-go/transport/spdy"
 	"k8s.io/kubernetes/pkg/client/conditions"
+	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 	"k8s.io/kubernetes/pkg/util/interrupt"
-	"log"
-	"net/url"
-	"os/user"
-	"time"
 )
 
 const (
@@ -49,6 +56,7 @@ You may set default configuration such as image and command in the config file, 
 `
 	defaultImage          = "nicolaka/netshoot:latest"
 	defaultAgentPort      = 10027
+	defaultAppName        = "debug-agent"
 	defaultConfigLocation = "/.kube/debug-config"
 )
 
@@ -64,6 +72,7 @@ type DebugOptions struct {
 	ContainerName  string
 	Command        []string
 	AgentPort      int
+	AppName        string
 	ConfigLocation string
 	Fork           bool
 
@@ -72,11 +81,27 @@ type DebugOptions struct {
 	Args       []string
 	Config     *restclient.Config
 
+	// use for port-forward
+	RESTClient    *restclient.RESTClient
+	PortForwarder portForwarder
+	Ports         []string
+	StopChannel   chan struct{}
+	ReadyChannel  chan struct{}
+
 	genericclioptions.IOStreams
+
+	wait sync.WaitGroup
 }
 
+// NewDebugOptions new debug options
 func NewDebugOptions(streams genericclioptions.IOStreams) *DebugOptions {
-	return &DebugOptions{Flags: genericclioptions.NewConfigFlags(), IOStreams: streams}
+	return &DebugOptions{
+		Flags:     genericclioptions.NewConfigFlags(),
+		IOStreams: streams,
+		PortForwarder: &defaultPortForwarder{
+			IOStreams: streams,
+		},
+	}
 }
 
 // NewDebugCmd returns a cobra command wrapping DebugOptions
@@ -133,6 +158,13 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		return err
 	}
 
+	matchVersionKubeConfigFlags := cmdutil.NewMatchVersionFlags(o.Flags)
+	f := cmdutil.NewFactory(matchVersionKubeConfigFlags)
+	o.RESTClient, err = f.RESTClient()
+	if err != nil {
+		return err
+	}
+
 	o.PodName = args[0]
 
 	// read defaults from config file
@@ -172,7 +204,12 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 			o.AgentPort = defaultAgentPort
 		}
 	}
-
+	if len(config.AppName) > 0 {
+		o.AppName = config.AppName
+	} else {
+		o.AppName = defaultAppName
+	}
+	o.Ports = []string{strconv.Itoa(o.AgentPort)}
 	o.Config, err = configLoader.ClientConfig()
 	if err != nil {
 		return err
@@ -182,10 +219,12 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		return err
 	}
 	o.CoreClient = clientset.CoreV1()
-
+	o.StopChannel = make(chan struct{}, 1)
+	o.ReadyChannel = make(chan struct{})
 	return nil
 }
 
+// Validate validate
 func (o *DebugOptions) Validate() error {
 	if len(o.PodName) == 0 {
 		return fmt.Errorf("pod name must be specified")
@@ -196,13 +235,41 @@ func (o *DebugOptions) Validate() error {
 	return nil
 }
 
+// Run run
 func (o *DebugOptions) Run() error {
-
 	pod, err := o.CoreClient.Pods(o.Namespace).Get(o.PodName, v1.GetOptions{})
 	if err != nil {
 		return err
 	}
+	agents, err := o.CoreClient.Pods(v1.NamespaceAll).List(v1.ListOptions{
+		LabelSelector: fmt.Sprintf("app=%s", o.AppName),
+	})
+	if err != nil {
+		return err
+	}
 
+	// get the agent pod which is in the same node with specify pod
+	var agent *corev1.Pod
+	for _, a := range agents.Items {
+		if a.Spec.NodeName == pod.Spec.NodeName {
+			agent = &a
+			break
+		}
+	}
+	if agent == nil {
+		return fmt.Errorf("there is no agent pod in the same node with your speficy pod %s", o.PodName)
+	}
+	fmt.Printf("pod %s PodIP %s, agentPodIP %s\n", o.PodName, pod.Status.PodIP, agent.Status.HostIP)
+	err = o.runPortForward(agent)
+	if err != nil {
+		return err
+	}
+	// client can't access the node ip in the k8s cluster sometimes,
+	// than we use forward ports to connect the specified pod and that will listen
+	// on specified ports in localhost, the ports can not access until receive the
+	// ready signal
+	fmt.Println("wait for forward port to debug agent ready...")
+	<-o.ReadyChannel
 	containerName := o.ContainerName
 	if len(containerName) == 0 {
 		if len(pod.Spec.Containers) > 1 {
@@ -239,9 +306,8 @@ func (o *DebugOptions) Run() error {
 	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
 		return fmt.Errorf("cannot debug in a completed pod; current phase is %s", pod.Status.Phase)
 	}
-	hostIP := pod.Status.HostIP
 
-	containerId, err := o.getContainerIdByName(pod, containerName)
+	containerID, err := o.getContainerIDByName(pod, containerName)
 	if err != nil {
 		return err
 	}
@@ -257,23 +323,21 @@ func (o *DebugOptions) Run() error {
 	}
 
 	fn := func() error {
-
 		// TODO: refactor as kubernetes api style, reuse rbac mechanism of kubernetes
-		uri, err := url.Parse(fmt.Sprintf("http://%s:%d", hostIP, o.AgentPort))
+		uri, err := url.Parse(fmt.Sprintf("http://%s:%d", "localhost", o.AgentPort))
 		if err != nil {
 			return err
 		}
 		uri.Path = fmt.Sprintf("/api/v1/debug")
 		params := url.Values{}
 		params.Add("image", o.Image)
-		params.Add("container", containerId)
+		params.Add("container", containerID)
 		bytes, err := json.Marshal(o.Command)
 		if err != nil {
 			return err
 		}
 		params.Add("command", string(bytes))
 		uri.RawQuery = params.Encode()
-
 		return o.remoteExecute("POST", uri, o.Config, o.In, o.Out, o.ErrOut, t.Raw, sizeQueue)
 	}
 
@@ -287,6 +351,11 @@ func (o *DebugOptions) Run() error {
 					log.Printf("failed to delete pod %s, consider manual deletion.", pod.Name)
 				}
 			}
+
+			// close the port-forward
+			if o.StopChannel != nil {
+				close(o.StopChannel)
+			}
 		}).Run(fn)
 	}
 
@@ -294,11 +363,11 @@ func (o *DebugOptions) Run() error {
 		fmt.Printf("error execute remote, %v\n", err)
 		return err
 	}
-
+	o.wait.Wait()
 	return nil
 }
 
-func (o *DebugOptions) getContainerIdByName(pod *corev1.Pod, containerName string) (string, error) {
+func (o *DebugOptions) getContainerIDByName(pod *corev1.Pod, containerName string) (string, error) {
 	for _, containerStatus := range pod.Status.ContainerStatuses {
 		if containerStatus.Name != containerName {
 			continue
@@ -393,4 +462,44 @@ func copyAndStripPod(pod *corev1.Pod, targetContainer string) *corev1.Pod {
 	copied.OwnerReferences = []v1.OwnerReference{}
 
 	return copied
+}
+
+func (o *DebugOptions) runPortForward(pod *corev1.Pod) error {
+	if pod.Status.Phase != corev1.PodRunning {
+		return fmt.Errorf("unable to forward port because pod is not running. Current status=%v", pod.Status.Phase)
+	}
+	o.wait.Add(1)
+	go func() {
+		defer o.wait.Done()
+		req := o.RESTClient.Post().
+			Resource("pods").
+			Namespace(pod.Namespace).
+			Name(pod.Name).
+			SubResource("portforward")
+		o.PortForwarder.ForwardPorts("POST", req.URL(), o)
+		fmt.Printf("end port-forward...\n")
+	}()
+	return nil
+}
+
+type portForwarder interface {
+	ForwardPorts(method string, url *url.URL, opts *DebugOptions) error
+}
+
+type defaultPortForwarder struct {
+	genericclioptions.IOStreams
+}
+
+// ForwardPorts forward ports
+func (f *defaultPortForwarder) ForwardPorts(method string, url *url.URL, opts *DebugOptions) error {
+	transport, upgrader, err := spdy.RoundTripperFor(opts.Config)
+	if err != nil {
+		return err
+	}
+	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, method, url)
+	fw, err := portforward.New(dialer, opts.Ports, opts.StopChannel, opts.ReadyChannel, f.Out, f.ErrOut)
+	if err != nil {
+		return err
+	}
+	return fw.ForwardPorts()
 }
