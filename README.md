@@ -82,6 +82,7 @@ You can override the default image and entrypoint with cli flag, or even better,
 
 ```yaml
 agent_port: 10027
+app_name: debug-agent
 image: nicolaka/netshoot:latest
 command:
 - '/bin/bash'

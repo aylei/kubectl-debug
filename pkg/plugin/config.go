@@ -1,13 +1,15 @@
 package plugin
 
 import (
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
+
+	"gopkg.in/yaml.v2"
 )
 
 type Config struct {
 	AgentPort int      `yaml:"agent_port,omitempty"`
 	Image     string   `yaml:"image,omitempty"`
+	AppName   string   `yaml:"app_name,omitempty"`
 	Command   []string `yaml:"command,omitempty"`
 }
 
