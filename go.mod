@@ -34,6 +34,7 @@ require (
 	github.com/googleapis/gnostic v0.2.0
 	github.com/gophercloud/gophercloud v0.0.0-20181221023737-94924357ebf6
 	github.com/gregjones/httpcache v0.0.0-20181110185634-c63ab54fda8f
+	github.com/hashicorp/golang-lru v0.5.1 // indirect
 	github.com/imdario/mergo v0.3.6
 	github.com/inconshreveable/mousetrap v1.0.0
 	github.com/json-iterator/go v1.1.5

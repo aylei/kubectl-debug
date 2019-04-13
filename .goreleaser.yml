@@ -38,3 +38,14 @@ changelog:
     exclude:
     - '^docs:'
     - '^test:'
+brew:
+  github:
+    owner: aylei
+    name: homebrew-tap
+  commit_author:
+    name: aylei
+    email: rayingecho@gmail.com
+  install: |
+    bin.install "kubectl-debug"
+  homepage: "https://www.github.com/aylei/kubectl-debug"
+  description: "Debug your pod by a new container with every troubleshooting tools pre-installed"
