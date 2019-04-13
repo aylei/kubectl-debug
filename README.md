@@ -65,15 +65,15 @@ kubect-debug POD_NAME
 
 Clone this repo and:
 ```bash
-# build plugin
-go build -o kubectl-debug ./cmd/plugin
+# make will build plugin binary and debug-agent image
+make
 # install plugin
 mv kubectl-debug /usr/local/bin
 
-# build agent
-go build -o debug-agent ./cmd/agent
-# build agent image
-docker build . -t debug-agent
+# build plugin only
+make plugin
+# build agent only
+make agent-docker
 ```
 
 # Configurations

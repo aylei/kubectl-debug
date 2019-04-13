@@ -5,4 +5,4 @@
 .swp
 vendor/
 debug-agent
-./kubectl-debug
+kubectl-debug
