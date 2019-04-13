@@ -28,11 +28,13 @@
 `kubectl-debug` is pretty simple, give it a try!
 
 Install the debug agent DaemonSet in your cluster, which is responsible for running the "new container":
+
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/aylei/kubectl-debug/master/scripts/agent_daemonset.yml
 ```
 
 Install the kubectl debug plugin:
+
 ```bash
 # Linux
 curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/0.0.2/kubectl-debug_0.0.2_linux-amd64
@@ -74,7 +76,9 @@ go build -o debug-agent ./cmd/agent
 docker build . -t debug-agent
 ```
 
-# Default image and entrypoint
+# Configurations
+
+`kubectl-debug` works fine without any extra configurations, but you can customize the default debug image and commands by configuration files.
 
 `kubectl-debug` uses [nicolaka/netshoot](https://github.com/nicolaka/netshoot) as the default image to run debug container, and use `bash` as default entrypoint.
 

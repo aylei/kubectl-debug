@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"k8s.io/apimachinery/pkg/labels"
 	"log"
 	"net/http"
 	"net/url"
@@ -13,11 +14,11 @@ import (
 	"sync"
 	"time"
 
-	term "github.com/aylei/kubectl-debug/pkg/util"
+	"github.com/aylei/kubectl-debug/pkg/util"
 	dockerterm "github.com/docker/docker/pkg/term"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
@@ -56,8 +57,9 @@ You may set default configuration such as image and command in the config file, 
 `
 	defaultImage          = "nicolaka/netshoot:latest"
 	defaultAgentPort      = 10027
-	defaultAppName        = "debug-agent"
 	defaultConfigLocation = "/.kube/debug-config"
+	defaultDaemonSetName  = "debug-agent"
+	defaultDaemonSetNs    = "default"
 )
 
 // DebugOptions specify how to run debug container in a running pod
@@ -78,6 +80,7 @@ type DebugOptions struct {
 
 	Flags      *genericclioptions.ConfigFlags
 	CoreClient coreclient.CoreV1Interface
+	KubeCli    *kubernetes.Clientset
 	Args       []string
 	Config     *restclient.Config
 
@@ -87,6 +90,10 @@ type DebugOptions struct {
 	Ports         []string
 	StopChannel   chan struct{}
 	ReadyChannel  chan struct{}
+
+	PortForward         bool
+	DebugAgentDaemonSet string
+	DebugAgentNamespace string
 
 	genericclioptions.IOStreams
 
@@ -109,11 +116,11 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	opts := NewDebugOptions(streams)
 
 	cmd := &cobra.Command{
-		Use: "debug POD [-c CONTAINER] -- COMMAND [args...]",
+		Use:                   "debug POD [-c CONTAINER] -- COMMAND [args...]",
 		DisableFlagsInUseLine: true,
-		Short:   "Run a container in a running pod",
-		Long:    longDesc,
-		Example: example,
+		Short:                 "Run a container in a running pod",
+		Long:                  longDesc,
+		Example:               example,
 		Run: func(c *cobra.Command, args []string) {
 			argsLenAtDash := c.ArgsLenAtDash()
 			if err := opts.Complete(c, args, argsLenAtDash); err != nil {
@@ -139,6 +146,12 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		fmt.Sprintf("Debug config file, default to ~%s", defaultConfigLocation))
 	cmd.Flags().BoolVar(&opts.Fork, "fork", false,
 		"Fork a new pod for debugging (useful if the pod status is CrashLoopBackoff)")
+	cmd.Flags().BoolVar(&opts.PortForward, "port-foward", false,
+		"Whether using port-forward to connect debug-agent")
+	cmd.Flags().StringVar(&opts.DebugAgentDaemonSet, "daemonset-name", opts.DebugAgentDaemonSet,
+		"Debug agent daemonset name when using port-forward")
+	cmd.Flags().StringVar(&opts.DebugAgentNamespace, "daemonset-ns", opts.DebugAgentNamespace,
+		"Debug agent namespace, default to 'default'")
 	opts.Flags.AddFlags(cmd.Flags())
 
 	return cmd
@@ -204,10 +217,19 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 			o.AgentPort = defaultAgentPort
 		}
 	}
-	if len(config.AppName) > 0 {
-		o.AppName = config.AppName
-	} else {
-		o.AppName = defaultAppName
+	if len(o.DebugAgentNamespace) < 1 {
+		if len(config.DebugAgentNamespace) > 0 {
+			o.DebugAgentNamespace = config.DebugAgentNamespace
+		} else {
+			o.DebugAgentNamespace = defaultDaemonSetNs
+		}
+	}
+	if len(o.DebugAgentDaemonSet) < 1 {
+		if len(config.DebugAgentDaemonSet) > 0 {
+			o.DebugAgentDaemonSet = config.DebugAgentDaemonSet
+		} else {
+			o.DebugAgentDaemonSet = defaultDaemonSetName
+		}
 	}
 	o.Ports = []string{strconv.Itoa(o.AgentPort)}
 	o.Config, err = configLoader.ClientConfig()
@@ -218,6 +240,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 	if err != nil {
 		return err
 	}
+	o.KubeCli = clientset
 	o.CoreClient = clientset.CoreV1()
 	o.StopChannel = make(chan struct{}, 1)
 	o.ReadyChannel = make(chan struct{})
@@ -235,41 +258,14 @@ func (o *DebugOptions) Validate() error {
 	return nil
 }
 
+// TODO: refactor Run() spaghetti code
 // Run run
 func (o *DebugOptions) Run() error {
 	pod, err := o.CoreClient.Pods(o.Namespace).Get(o.PodName, v1.GetOptions{})
 	if err != nil {
 		return err
 	}
-	agents, err := o.CoreClient.Pods(v1.NamespaceAll).List(v1.ListOptions{
-		LabelSelector: fmt.Sprintf("app=%s", o.AppName),
-	})
-	if err != nil {
-		return err
-	}
 
-	// get the agent pod which is in the same node with specify pod
-	var agent *corev1.Pod
-	for _, a := range agents.Items {
-		if a.Spec.NodeName == pod.Spec.NodeName {
-			agent = &a
-			break
-		}
-	}
-	if agent == nil {
-		return fmt.Errorf("there is no agent pod in the same node with your speficy pod %s", o.PodName)
-	}
-	fmt.Printf("pod %s PodIP %s, agentPodIP %s\n", o.PodName, pod.Status.PodIP, agent.Status.HostIP)
-	err = o.runPortForward(agent)
-	if err != nil {
-		return err
-	}
-	// client can't access the node ip in the k8s cluster sometimes,
-	// than we use forward ports to connect the specified pod and that will listen
-	// on specified ports in localhost, the ports can not access until receive the
-	// ready signal
-	fmt.Println("wait for forward port to debug agent ready...")
-	<-o.ReadyChannel
 	containerName := o.ContainerName
 	if len(containerName) == 0 {
 		if len(pod.Spec.Containers) > 1 {
@@ -322,9 +318,46 @@ func (o *DebugOptions) Run() error {
 		o.ErrOut = nil
 	}
 
+	if o.PortForward {
+		daemonSet, err := o.KubeCli.AppsV1().DaemonSets(o.DebugAgentNamespace).Get(o.DebugAgentDaemonSet, v1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		labelSet := labels.Set(daemonSet.Spec.Selector.MatchLabels)
+		agents, err := o.CoreClient.Pods(o.DebugAgentNamespace).List(v1.ListOptions{
+			LabelSelector: labelSet.String(),
+			FieldSelector: fmt.Sprintf("spec.nodename=%s", pod.Spec.NodeName),
+		})
+		if err != nil {
+			return err
+		}
+
+		if len(agents.Items) < 1 {
+			return fmt.Errorf("there is no agent pod in the same node with your speficy pod %s", o.PodName)
+		}
+		agent := &agents.Items[0]
+		fmt.Printf("pod %s PodIP %s, agentPodIP %s\n", o.PodName, pod.Status.PodIP, agent.Status.HostIP)
+		err = o.runPortForward(agent)
+		if err != nil {
+			return err
+		}
+		// client can't access the node ip in the k8s cluster sometimes,
+		// than we use forward ports to connect the specified pod and that will listen
+		// on specified ports in localhost, the ports can not access until receive the
+		// ready signal
+		fmt.Println("wait for forward port to debug agent ready...")
+		<-o.ReadyChannel
+	}
+
 	fn := func() error {
 		// TODO: refactor as kubernetes api style, reuse rbac mechanism of kubernetes
-		uri, err := url.Parse(fmt.Sprintf("http://%s:%d", "localhost", o.AgentPort))
+		var targetHost string
+		if o.PortForward {
+			targetHost = "localhost"
+		} else {
+			targetHost = pod.Status.HostIP
+		}
+		uri, err := url.Parse(fmt.Sprintf("http://%s:%d", targetHost, o.AgentPort))
 		if err != nil {
 			return err
 		}
@@ -352,9 +385,11 @@ func (o *DebugOptions) Run() error {
 				}
 			}
 
-			// close the port-forward
-			if o.StopChannel != nil {
-				close(o.StopChannel)
+			if o.PortForward {
+				// close the port-forward
+				if o.StopChannel != nil {
+					close(o.StopChannel)
+				}
 			}
 		}).Run(fn)
 	}

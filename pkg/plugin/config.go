@@ -7,10 +7,14 @@ import (
 )
 
 type Config struct {
-	AgentPort int      `yaml:"agent_port,omitempty"`
-	Image     string   `yaml:"image,omitempty"`
-	AppName   string   `yaml:"app_name,omitempty"`
-	Command   []string `yaml:"command,omitempty"`
+	AgentPort           int      `yaml:"agentPort,omitempty"`
+	Image               string   `yaml:"image,omitempty"`
+	DebugAgentDaemonSet string   `yaml:"debugAgentDaemonset,omitempty"`
+	DebugAgentNamespace string   `yaml:"debugAgentNamespace,omitempty"`
+	Command             []string `yaml:"command,omitempty"`
+
+	// deprecated
+	AgentPortOld int `yaml:"agent_port,omitempty"`
 }
 
 func Load(s string) (*Config, error) {
@@ -19,6 +23,10 @@ func Load(s string) (*Config, error) {
 	err := yaml.UnmarshalStrict([]byte(s), cfg)
 	if err != nil {
 		return nil, err
+	}
+	// be compatible with old configuration key
+	if cfg.AgentPort == 0 {
+		cfg.AgentPort = cfg.AgentPortOld
 	}
 	return cfg, nil
 }
