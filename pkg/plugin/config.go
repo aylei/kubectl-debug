@@ -12,6 +12,7 @@ type Config struct {
 	DebugAgentDaemonSet string   `yaml:"debugAgentDaemonset,omitempty"`
 	DebugAgentNamespace string   `yaml:"debugAgentNamespace,omitempty"`
 	Command             []string `yaml:"command,omitempty"`
+	PortForward         bool     `yaml:"portForward,omitempty"`
 
 	// deprecated
 	AgentPortOld int `yaml:"agent_port,omitempty"`

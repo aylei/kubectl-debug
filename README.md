@@ -19,7 +19,7 @@
 - [implementation details](#details)
 - [contribute](#contribute)
 
-# Demo
+# Screenshots
 
 ![gif](./docs/kube-debug.gif)
 
@@ -27,7 +27,7 @@
 
 `kubectl-debug` is pretty simple, give it a try!
 
-Install the debug agent DaemonSet in your cluster, which is responsible for running the "new container":
+Install the debug agent DaemonSet in your cluster, which is responsible for running the "debug container":
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/aylei/kubectl-debug/master/scripts/agent_daemonset.yml
@@ -35,31 +35,49 @@ kubectl apply -f https://raw.githubusercontent.com/aylei/kubectl-debug/master/sc
 
 Install the kubectl debug plugin:
 
-```bash
-# Linux
-curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/0.0.2/kubectl-debug_0.0.2_linux-amd64
+Using [krew]():
+```shell
+```
 
+Homebrew:
+```shell
 # MacOS
-curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/0.0.2/kubectl-debug_0.0.2_macos-amd64
+brew install aylei/tap/kubectl-debug
+```
+
+Download the binary:
+```bash
+export PLUGIN_VERSION=0.1.0
+# linux x86_64
+curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/${PLUGIN_VERSION}/kubectl-debug_${PLUGIN_VERSION}_linux-amd64
+# macos
+curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/${PLUGIN_VERSION}/kubectl-debug_${PLUGIN_VERSION}_darwin-amd64
 
 chmod +x ./kubectl-debug
 sudo mv kubectl-debug /usr/local/bin/
 ```
 
-For windows users, download the latest binary from the [release page](https://github.com/aylei/kubectl-debug/releases/tag/0.0.2) and add it to your PATH.
+For windows users, download the latest archive from the [release page](https://github.com/aylei/kubectl-debug/releases/tag/0.0.2) and decompress it to your PATH.
 
 Try it out!
 ```bash
 # kubectl 1.12.0 or higher
-kubectl debug POD_NAME
-# learn more with 
 kubectl debug -h
+kubectl debug POD_NAME
 
-# old versions of kubectl
+# in case of your pod stuck in `CrashLoopBackoff` state and cannot be connected to,
+# you can fork a new pod and diagnose the problem in the forked pod
+kubectl debug POD_NAME --fork
+
+# if the node ip is not directly accessible, try port-forward mode
+kubectl debug POD_NAME --port-fowrad --daemonset-ns=kube-system --daemonset-name=debug-agent
+
+# old versions of kubectl cannot discover plugins, you may execute the binary directly
 kubect-debug POD_NAME
+
 ```
 
-> Compatibility: I've tested `kubectl-debug` with kubectl v1.13.1 and kubernetes v1.9.1. I don't have an environment to test more versions but I suppose that `kubectl-debug` is compatible with all versions of kubernetes and kubectl 1.12.0+. Please [file an issue](https://github.com/aylei/kubectl-debug/issues/new) if you find `kubectl-debug` does not work.
+Any trouble? [file and issue for help](https://github.com/aylei/kubectl-debug/issues/new)
 
 # Build from source
 
@@ -78,29 +96,46 @@ make agent-docker
 
 # Configurations
 
-`kubectl-debug` works fine without any extra configurations, but you can customize the default debug image and commands by configuration files.
-
 `kubectl-debug` uses [nicolaka/netshoot](https://github.com/nicolaka/netshoot) as the default image to run debug container, and use `bash` as default entrypoint.
 
 You can override the default image and entrypoint with cli flag, or even better, with config file `~/.kube/debug-config`:
 
 ```yaml
-agent_port: 10027
-app_name: debug-agent
+# debug agent listening port
+# default to 10027
+agentPort: 10027
+# daemonset name of the debug-agent, used in port-forward
+# default to 'debug-agent'
+debugAgentDaemonset: debug-agent
+# daemonset namespace of the debug-agent, used in port-forwad
+# default to 'default'
+debugAgentNamespace: kube-system
+# whether using port-forward when connecting debug-agent
+# default false
+portForward: true
+# image of the debug container
+# default as showed
 image: nicolaka/netshoot:latest
+# start command of the debug container
+# default ['bash']
 command:
 - '/bin/bash'
 - '-l'
 ```
 
+If the debug-agent is not accessible from host port, it is recommended to set `portForward: true` to using port-forawrd mode.
+
 PS: `kubectl-debug` will always override the entrypoint of the container, which is by design to avoid users running an unwanted service by mistake(of course you can always do this explicitly).
 
-# Future works
+# Roadmap
 
 `kubectl-debug` is supposed to be just a troubleshooting helper, and is going be replaced by the native `kubectl debug` command when [this proposal](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/node/troubleshoot-running-pods.md) is implemented and merged in the future kubernetes release. But for now, there is still some works to do to improve `kubectl-debug`.
 
+If you are interested in any of following features, please file an issue to avoid potential duplication.
+
 - [ ] Security. `kubectl-debug` runs privileged agent on every node, and client talks to the agent directly. A possible solution is introducing a central apiserver to do RBAC, which integrates to the kube apiserver using [aggregation layer](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/apiserver-aggregation/)
 - [ ] Protocol. `kubectl-debug` vendor the SPDY wrapper from `client-go`. SPDY is deprecated now, websockets may be a better choice
+- [ ] e2e tests.
 
 # Details
 
