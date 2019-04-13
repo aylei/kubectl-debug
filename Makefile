@@ -1,7 +1,7 @@
-.PHONY: build plugin agent
+.PHONY: build plugin agent check
 
 GOENV  := GO15VENDOREXPERIMENT="1" GO111MODULE=on CGO_ENABLED=0 GOOS=linux GOARCH=amd64
-GO := $(GOENV) go build
+GO := $(GOENV) go
 
 default: build
 
@@ -14,4 +14,9 @@ agent-docker: agent
 	docker build . -t aylei/debug-agent:latest
 
 agent:
-	$(GO) -o debug-agent cmd/agent/main.go
+	$(GO) build -o debug-agent cmd/agent/main.go
+
+check:
+	find . -iname '*.go' -type f | grep -v /vendor/ | xargs gofmt -l
+	GO111MODULE=on go test -v -race ./...
+	$(GO) vet ./...

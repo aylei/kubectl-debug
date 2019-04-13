@@ -231,7 +231,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 			o.DebugAgentDaemonSet = defaultDaemonSetName
 		}
 	}
-	if config.PortForward == true {
+	if config.PortForward {
 		o.PortForward = true
 	}
 	o.Ports = []string{strconv.Itoa(o.AgentPort)}
