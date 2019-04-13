@@ -11,10 +11,10 @@
 
 `kubectl-debug` is an out-of-tree solution for [troubleshooting running pods](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/node/troubleshoot-running-pods.md), which allows you to run a new container in running pods for debugging purpose. The new container will join the `pid`, `network`, `user` and `ipc` namespaces of the target container, so you can use arbitrary trouble-shooting tools without pre-installing them in your production container image.
 
-- [demo](#demo)
+- [screenshots](#screenshots)
 - [quick start](#quick-start)
 - [build from source](#build-from-source)
-- [default image and entrypoints](#default-image-and-entrypoint)
+- [configuration](#configurations)
 - [future works](#future-works)
 - [implementation details](#details)
 - [contribute](#contribute)
@@ -37,8 +37,9 @@ helm install -n=debug-agent ./contrib/helm/kubectl-debug
 
 Install the kubectl debug plugin:
 
-Using [krew]():
+Using [krew](https://github.com/kubernetes-sigs/krew):
 ```shell
+# Waiting the krew index PR to be merged...
 ```
 
 Homebrew:
@@ -50,15 +51,15 @@ Download the binary:
 ```bash
 export PLUGIN_VERSION=0.1.0
 # linux x86_64
-curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/${PLUGIN_VERSION}/kubectl-debug_${PLUGIN_VERSION}_linux-amd64
+curl -Lo kubectl-debug.tar.gz https://github.com/aylei/kubectl-debug/releases/download/v${PLUGIN_VERSION}/kubectl-debug_${PLUGIN_VERSION}_linux_amd64.tar.gz
 # macos
-curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/${PLUGIN_VERSION}/kubectl-debug_${PLUGIN_VERSION}_darwin-amd64
+curl -Lo kubectl-debug.tar.gz https://github.com/aylei/kubectl-debug/releases/download/v${PLUGIN_VERSION}/kubectl-debug_${PLUGIN_VERSION}_darwin_amd64.tar.gz
 
-chmod +x ./kubectl-debug
+tar -zxvf kubectl-debug.tar.gz kubectl-debug
 sudo mv kubectl-debug /usr/local/bin/
 ```
 
-For windows users, download the latest archive from the [release page](https://github.com/aylei/kubectl-debug/releases/tag/0.0.2) and decompress it to your PATH.
+For windows users, download the latest archive from the [release page](https://github.com/aylei/kubectl-debug/releases/tag/v0.1.0), decompress the package and add it to your PATH.
 
 Try it out!
 ```bash

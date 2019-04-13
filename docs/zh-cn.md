@@ -5,57 +5,85 @@
 # Quick Start
 
 `kubectl-debug` 包含两部分, 一部分是用户侧的 kubectl 插件, 另一部分是部署在所有 k8s 节点上的 agent(用于启动"新容器", 同时也作为 SPDY 连接的中继). 因此首先要部署 agent.
-
-推荐以 DaemonSet 的形式部署:
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/aylei/kubectl-debug/master/scripts/agent_daemonset.yml
+# 或者使用 helm 安装
+helm install -n=debug-agent ./contrib/helm/kubectl-debug
 ```
 
-接下来, 安装 kubectl 插件:
+安装 kubectl 插件:
 
-```bash
-# Linux
-curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/0.0.1/kubectl-debug_0.0.1_linux-amd64
-
-# MacOS
-curl -Lo kubectl-debug https://github.com/aylei/kubectl-debug/releases/download/0.0.1/kubectl-debug_0.0.1_macos-amd64
-
-chmod +x ./kubectl-debug
-mv kubectdl-debug /usr/local/bin/
+使用 [krew](https://github.com/kubernetes-sigs/krew):
+```shell
+# Waiting the krew index PR to be merged...
 ```
 
-Windows 上可以到 [release page](https://github.com/aylei/kubectl-debug/releases/tag/0.0.1) 下载最新的 binary (_win-amd64结尾) 然后加入 PATH.
+使用 Homebrew:
+```shell
+brew install aylei/tap/kubectl-debug
+```
 
-装完之后就可以试试看了:
+直接下载预编译的压缩包:
 ```bash
-kubectl debug POD_NAME
-# learn more with 
+export PLUGIN_VERSION=0.1.0
+# linux x86_64
+curl -Lo kubectl-debug.tar.gz https://github.com/aylei/kubectl-debug/releases/download/v${PLUGIN_VERSION}/kubectl-debug_${PLUGIN_VERSION}_linux_amd64.tar.gz
+# macos
+curl -Lo kubectl-debug.tar.gz https://github.com/aylei/kubectl-debug/releases/download/v${PLUGIN_VERSION}/kubectl-debug_${PLUGIN_VERSION}_darwin_amd64.tar.gz
+
+tar -zxvf kubectl-debug.tar.gz kubectl-debug
+sudo mv kubectl-debug /usr/local/bin/
+```
+
+Windows 用户可以从 [release page](https://github.com/aylei/kubectl-debug/releases/tag/v0.1.0) 进行下载并添加到 PATH 中
+
+简单使用:
+```bash
+# kubectl 1.12.0 or higher
 kubectl debug -h
+kubectl debug POD_NAME
+
+# in case of your pod stuck in `CrashLoopBackoff` state and cannot be connected to,
+# you can fork a new pod and diagnose the problem in the forked pod
+kubectl debug POD_NAME --fork
+
+# if the node ip is not directly accessible, try port-forward mode
+kubectl debug POD_NAME --port-fowrad --daemonset-ns=kube-system --daemonset-name=debug-agent
+
+# old versions of kubectl cannot discover plugins, you may execute the binary directly
+kubect-debug POD_NAME
+
 ```
+
+Any trouble? [file and issue for help](https://github.com/aylei/kubectl-debug/issues/new)
 
 # 默认镜像和 Entrypoint
 
 `kubectl-debug` 使用 [nicolaka/netshoot](https://github.com/nicolaka/netshoot) 作为默认镜像. 默认镜像和指令都可以通过命令行参数进行覆盖. 考虑到每次都指定有点麻烦, 也可以通过文件配置的形式进行覆盖, 编辑 `~/.kube/debug-config` 文件:
 
-```bash
-agent_port: 10027
+```yaml
+# debug-agent 的端口
+# 默认 10027
+agentPort: 10027
+# debug-agent DaemonSet 的名字, port-forward 模式时会用到
+# 默认 'debug-agent'
+debugAgentDaemonset: debug-agent
+# debug-agent DaemonSet 的 namespace, port-forward 模式会用到
+# 默认 'default'
+debugAgentNamespace: kube-system
+# 是否开启 port-forward 模式
+# 默认 false
+portForward: true
+# image of the debug container
+# default as showed
 image: nicolaka/netshoot:latest
+# start command of the debug container
+# default ['bash']
 command:
 - '/bin/bash'
-- '-l'
+- '-l
 ```
 
+当 debug-agent 无法直连时, 可以开启 port-forward 模式来绕过
+
 > `kubectl-debug` 会将容器的 entrypoint 直接覆盖掉, 这是为了避免在 debug 时不小心启动非 shell 进程.
-
-# 实现细节
-
-主要参照了 `kubectl exec` 的实现, 但 `exec` 要复杂很多, `debug` 的链路还是很简单的:
-
-1. 根据指令找到 Pod 的 HostIP, 以及目标容器的 ContainerID
-2. 对 HostIP 上的 agent 发起 http 请求, 请求会携带上 image, command 这些参数
-3. agent 返回一个协议升级响应, 在 client 与 agent 之间建立 SPDY 连接
-4. agent 确认目标容器是否正常运行, 若否, 返回一个错误
-5. agent 启动一个新容器, 加入到目标容器的 `pid`, `network`, `ipc` 以及 `user` namespace 中
-6. 容器启动完成后, agent 将 server 侧 SPDY 的 stdin, stdout, tty 绑定到新容器的 stdin, stdout 和 tty 上
-7. 一切就绪, 可以开始 debug 了
-8. debug 完毕, 关闭连接, agent 做一些清理操作, 关闭并移除容器
