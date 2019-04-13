@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"os/user"
 	"strconv"
 	"sync"
@@ -186,7 +187,10 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 	}
 	config, err := LoadFile(configFile)
 	if err != nil {
-		log.Println("error loading file ", err)
+		if !os.IsNotExist(err) {
+			// TODO: support verbosity level
+			fmt.Fprintf(o.ErrOut, "error parsing configuration file: %v", err)
+		}
 		config = &Config{}
 	}
 
