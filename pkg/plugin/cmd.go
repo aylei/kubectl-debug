@@ -326,16 +326,21 @@ func (o *DebugOptions) Run() error {
 		labelSet := labels.Set(daemonSet.Spec.Selector.MatchLabels)
 		agents, err := o.CoreClient.Pods(o.DebugAgentNamespace).List(v1.ListOptions{
 			LabelSelector: labelSet.String(),
-			FieldSelector: fmt.Sprintf("spec.nodename=%s", pod.Spec.NodeName),
 		})
 		if err != nil {
 			return err
 		}
+		var agent *corev1.Pod
+		for i := range agents.Items {
+			if agents.Items[i].Spec.NodeName == pod.Spec.NodeName {
+				agent = &agents.Items[i]
+				break
+			}
+		}
 
-		if len(agents.Items) < 1 {
+		if agent == nil {
 			return fmt.Errorf("there is no agent pod in the same node with your speficy pod %s", o.PodName)
 		}
-		agent := &agents.Items[0]
 		fmt.Printf("pod %s PodIP %s, agentPodIP %s\n", o.PodName, pod.Status.PodIP, agent.Status.HostIP)
 		err = o.runPortForward(agent)
 		if err != nil {
