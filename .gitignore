@@ -4,6 +4,6 @@
 *.output
 .swp
 vendor/
-debug-agent
-kubectl-debug
+/debug-agent
+/kubectl-debug
 dist/

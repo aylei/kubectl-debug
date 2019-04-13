@@ -31,6 +31,8 @@ Install the debug agent DaemonSet in your cluster, which is responsible for runn
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/aylei/kubectl-debug/master/scripts/agent_daemonset.yml
+# or using helm
+helm install -n=debug-agent ./contrib/helm/kubectl-debug
 ```
 
 Install the kubectl debug plugin:
@@ -41,7 +43,6 @@ Using [krew]():
 
 Homebrew:
 ```shell
-# MacOS
 brew install aylei/tap/kubectl-debug
 ```
 
