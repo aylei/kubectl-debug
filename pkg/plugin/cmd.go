@@ -60,6 +60,8 @@ You may set default configuration such as image and command in the config file, 
 	defaultConfigLocation = "/.kube/debug-config"
 	defaultDaemonSetName  = "debug-agent"
 	defaultDaemonSetNs    = "default"
+
+	usageError = "expects 'debug POD_NAME' for debug command"
 )
 
 // DebugOptions specify how to run debug container in a running pod
@@ -123,15 +125,9 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		Example:               example,
 		Run: func(c *cobra.Command, args []string) {
 			argsLenAtDash := c.ArgsLenAtDash()
-			if err := opts.Complete(c, args, argsLenAtDash); err != nil {
-				fmt.Println(err)
-			}
-			if err := opts.Validate(); err != nil {
-				fmt.Println(err)
-			}
-			if err := opts.Run(); err != nil {
-				fmt.Println(err)
-			}
+			cmdutil.CheckErr(opts.Complete(c, args, argsLenAtDash))
+			cmdutil.CheckErr(opts.Validate())
+			cmdutil.CheckErr(opts.Run())
 		},
 	}
 	//cmd.Flags().BoolVarP(&opts.RetainContainer, "retain", "r", defaultRetain,
@@ -161,7 +157,7 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash int) error {
 	o.Args = args
 	if len(args) == 0 {
-		return fmt.Errorf("error pod not specified")
+		return cmdutil.UsageErrorf(cmd, usageError)
 	}
 
 	var err error

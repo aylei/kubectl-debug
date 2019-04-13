@@ -8,7 +8,7 @@ default: build
 build: plugin agent-docker
 
 plugin:
-	GO111MODULE=on CGO_ENABLED=0 go build -o kubectl-debug cmd/agent/main.go
+	GO111MODULE=on CGO_ENABLED=0 go build -o kubectl-debug cmd/plugin/main.go
 
 agent-docker: agent
 	docker build . -t aylei/debug-agent
