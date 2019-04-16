@@ -52,15 +52,15 @@ spec:
           path: /var/run/docker.sock
     {{- if .ValuesnodeSelector }}
       nodeSelector:
-{{ toYaml .ValuesnodeSelector | indent 8 }}
+{{ toYaml .Values.nodeSelector | indent 8 }}
     {{- end }}
-    {{- if .Valuestolerations }}
+    {{- if .Values.tolerations }}
       tolerations:
-{{ toYaml .Valuestolerations | indent 8 }}
+{{ toYaml .Values.tolerations | indent 8 }}
     {{- end }}
-    {{- if .Valuesaffinity }}
+    {{- if .Values.affinity }}
       affinity:
-{{ toYaml .Valuesaffinity | indent 8 }}
+{{ toYaml .Values.affinity | indent 8 }}
     {{- end }}
   updateStrategy:
     rollingUpdate:
