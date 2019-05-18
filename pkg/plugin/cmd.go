@@ -1,11 +1,11 @@
 package plugin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"k8s.io/apimachinery/pkg/labels"
 	"log"
 	"net/http"
 	"net/url"
@@ -15,12 +15,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aylei/kubectl-debug/pkg/util"
+	"text/template"
+
+	"k8s.io/apimachinery/pkg/labels"
+
+	term "github.com/aylei/kubectl-debug/pkg/util"
 	dockerterm "github.com/docker/docker/pkg/term"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 	coreclient "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -63,6 +68,46 @@ You may set default configuration such as image and command in the config file, 
 	defaultDaemonSetNs    = "default"
 
 	usageError = "expects 'debug POD_NAME' for debug command"
+
+	defaultAgentImage         = "aylei/debug-agent:latest"
+	defaultAgentPodNamePrefix = "debug-agent-pod-"
+	defaultAgentPodNamespace  = "default"
+	defaultAgentPodTemplate   = `
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{.AgentPodName}}
+  namespace: {{.AgentPodNamespace}}
+spec:
+  nodeName: {{.AgentPodNode}}
+  containers:
+  - image: {{.AgentImage}}
+    imagePullPolicy: Always
+    livenessProbe:
+      failureThreshold: 3
+      httpGet:
+        path: /healthz
+        port: 10027
+        scheme: HTTP
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      successThreshold: 1
+      timeoutSeconds: 1
+    name: debug-agent
+    ports:
+    - containerPort: 10027
+      hostPort: {{.AgentPort}}
+      name: http
+      protocol: TCP
+    volumeMounts:
+    - name: docker
+      mountPath: "/var/run/docker.sock"
+  volumes:
+  - name: docker
+    hostPath:
+      path: /var/run/docker.sock
+  restartPolicy: Never
+`
 )
 
 // DebugOptions specify how to run debug container in a running pod
@@ -80,6 +125,14 @@ type DebugOptions struct {
 	AppName        string
 	ConfigLocation string
 	Fork           bool
+
+	//used for agentless mode
+	AgentLess  bool
+	AgentImage string
+	// agentPodName = agentPodNamePrefix + nodeName
+	AgentPodName      string
+	AgentPodNamespace string
+	AgentPodNode      string
 
 	Flags      *genericclioptions.ConfigFlags
 	CoreClient coreclient.CoreV1Interface
@@ -149,6 +202,14 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		"Debug agent daemonset name when using port-forward")
 	cmd.Flags().StringVar(&opts.DebugAgentNamespace, "daemonset-ns", opts.DebugAgentNamespace,
 		"Debug agent namespace, default to 'default'")
+	// falgs used for agentless mode.
+	cmd.Flags().BoolVar(&opts.AgentLess, "agent-less", false, "Whether to turn on agentless mode. Agentless mode: debug target pod if there isn't an agent running on the target host.")
+	cmd.Flags().StringVar(&opts.AgentImage, "agent-image", "",
+		fmt.Sprintf("Agentless mode, the container Image to run the agent container , default to %s", defaultAgentImage))
+	cmd.Flags().StringVar(&opts.AgentPodName, "agent-pod-name-prefix", "",
+		fmt.Sprintf("Agentless mode, pod name prefix , default to %s", defaultAgentPodNamePrefix))
+	cmd.Flags().StringVar(&opts.AgentPodNamespace, "agent-pod-namespace", "",
+		fmt.Sprintf("Agentless mode, agent pod namespace, default to %s", defaultAgentPodNamespace))
 	opts.Flags.AddFlags(cmd.Flags())
 
 	return cmd
@@ -231,6 +292,31 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 			o.DebugAgentDaemonSet = defaultDaemonSetName
 		}
 	}
+
+	if len(o.AgentPodName) < 1 {
+		if len(config.AgentPodNamePrefix) > 0 {
+			o.AgentPodName = config.AgentPodNamePrefix
+		} else {
+			o.AgentPodName = defaultAgentPodNamePrefix
+		}
+	}
+
+	if len(o.AgentImage) < 1 {
+		if len(config.AgentImage) > 0 {
+			o.AgentImage = config.AgentImage
+		} else {
+			o.AgentImage = defaultAgentImage
+		}
+	}
+
+	if len(o.AgentPodNamespace) < 1 {
+		if len(config.AgentPodNamespace) > 0 {
+			o.AgentPodNamespace = config.AgentPodNamespace
+		} else {
+			o.AgentPodNamespace = defaultAgentPodNamespace
+		}
+	}
+
 	if config.PortForward {
 		o.PortForward = true
 	}
@@ -277,29 +363,31 @@ func (o *DebugOptions) Run() error {
 		}
 		containerName = pod.Spec.Containers[0].Name
 	}
+	// Launch debug launching pod in agentless mode.
+	var agentPod *corev1.Pod
+	if o.AgentLess {
+		o.AgentPodNode = pod.Spec.NodeName
+		// add node name as suffix
+		o.AgentPodName = o.AgentPodName + o.AgentPodNode
+		agentPod, err = o.getAgentPod()
+		if err != nil {
+			return err
+		}
+		agentPod, err = launchPod(agentPod, o.CoreClient)
+		if err != nil {
+			return err
+		}
+	}
 
 	// in fork mode, we launch an new pod as a copy of target pod
 	// and hack the entry point of the target container with sleep command
 	// which keeps the container running.
 	if o.Fork {
 		pod = copyAndStripPod(pod, containerName)
-		pod, err = o.CoreClient.Pods(pod.Namespace).Create(pod)
+		pod, err = launchPod(pod, o.CoreClient)
 		if err != nil {
 			return err
 		}
-		watcher, err := o.CoreClient.Pods(pod.Namespace).Watch(v1.SingleObject(pod.ObjectMeta))
-		if err != nil {
-			return err
-		}
-		// FIXME: hard code -> config
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-		log.Println("waiting for forked container running...")
-		event, err := watch.UntilWithoutRetry(ctx, watcher, conditions.PodRunning)
-		if err != nil {
-			return err
-		}
-		pod = event.Object.(*corev1.Pod)
 	}
 
 	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
@@ -322,23 +410,28 @@ func (o *DebugOptions) Run() error {
 	}
 
 	if o.PortForward {
-		daemonSet, err := o.KubeCli.AppsV1().DaemonSets(o.DebugAgentNamespace).Get(o.DebugAgentDaemonSet, v1.GetOptions{})
-		if err != nil {
-			return err
-		}
-		labelSet := labels.Set(daemonSet.Spec.Selector.MatchLabels)
-		agents, err := o.CoreClient.Pods(o.DebugAgentNamespace).List(v1.ListOptions{
-			LabelSelector: labelSet.String(),
-		})
-		if err != nil {
-			return err
-		}
 		var agent *corev1.Pod
-		for i := range agents.Items {
-			if agents.Items[i].Spec.NodeName == pod.Spec.NodeName {
-				agent = &agents.Items[i]
-				break
+		if !o.AgentLess {
+			// Agent is running
+			daemonSet, err := o.KubeCli.AppsV1().DaemonSets(o.DebugAgentNamespace).Get(o.DebugAgentDaemonSet, v1.GetOptions{})
+			if err != nil {
+				return err
 			}
+			labelSet := labels.Set(daemonSet.Spec.Selector.MatchLabels)
+			agents, err := o.CoreClient.Pods(o.DebugAgentNamespace).List(v1.ListOptions{
+				LabelSelector: labelSet.String(),
+			})
+			if err != nil {
+				return err
+			}
+			for i := range agents.Items {
+				if agents.Items[i].Spec.NodeName == pod.Spec.NodeName {
+					agent = &agents.Items[i]
+					break
+				}
+			}
+		} else {
+			agent = agentPod
 		}
 
 		if agent == nil {
@@ -386,6 +479,7 @@ func (o *DebugOptions) Run() error {
 	withCleanUp := func() error {
 		return interrupt.Chain(nil, func() {
 			if o.Fork {
+				fmt.Println("delete forked pod.....")
 				err := o.CoreClient.Pods(pod.Namespace).Delete(pod.Name, v1.NewDeleteOptions(0))
 				if err != nil {
 					// we may leak pod here, but we have nothing to do except noticing the user
@@ -397,6 +491,15 @@ func (o *DebugOptions) Run() error {
 				// close the port-forward
 				if o.StopChannel != nil {
 					close(o.StopChannel)
+				}
+			}
+			// delete agent pod
+			if o.AgentLess && agentPod != nil {
+				fmt.Println("delete agent pod.....")
+				err := o.CoreClient.Pods(agentPod.Namespace).Delete(agentPod.Name, v1.NewDeleteOptions(0))
+				if err != nil {
+					// we may leak pod here, but we have nothing to do except noticing the user
+					log.Printf("failed to delete pod %s, consider manual deletion.", agentPod.Name)
 				}
 			}
 		}).Run(fn)
@@ -505,6 +608,49 @@ func copyAndStripPod(pod *corev1.Pod, targetContainer string) *corev1.Pod {
 	copied.OwnerReferences = []v1.OwnerReference{}
 
 	return copied
+}
+
+// launchPod launch given pod until it's running
+func launchPod(pod *corev1.Pod, client coreclient.CoreV1Interface) (*corev1.Pod, error) {
+	pod, err := client.Pods(pod.Namespace).Create(pod)
+	if err != nil {
+		return pod, err
+	}
+
+	watcher, err := client.Pods(pod.Namespace).Watch(v1.SingleObject(pod.ObjectMeta))
+	if err != nil {
+		return nil, err
+	}
+	// FIXME: hard code -> config
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	log.Println("waiting for container running...")
+	event, err := watch.UntilWithoutRetry(ctx, watcher, conditions.PodRunning)
+	if err != nil {
+		fmt.Printf("w:%v", err)
+		return nil, err
+	}
+	pod = event.Object.(*corev1.Pod)
+	return pod, nil
+}
+
+// getAgentPod construnct agentPod from agent pod template
+func (o *DebugOptions) getAgentPod() (*corev1.Pod, error) {
+	t := template.Must(template.New("pod").Parse(defaultAgentPodTemplate))
+	var buf bytes.Buffer
+	err := t.Execute(&buf, o)
+	if err != nil {
+		return nil, err
+	}
+	agentPod := &corev1.Pod{}
+	dec := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(buf.Bytes()), 1000)
+
+	if err := dec.Decode(&agentPod); err != nil {
+		return nil, err
+	}
+
+	fmt.Printf("Agent Pod info : \n\tName:%s\n\tNamespace:%s\n\tHostPort:%d\n\n", agentPod.GetObjectMeta().GetName(), agentPod.GetObjectMeta().GetNamespace(), o.AgentPort)
+	return agentPod, nil
 }
 
 func (o *DebugOptions) runPortForward(pod *corev1.Pod) error {
