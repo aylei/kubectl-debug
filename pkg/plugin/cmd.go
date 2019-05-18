@@ -202,7 +202,7 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		"Debug agent daemonset name when using port-forward")
 	cmd.Flags().StringVar(&opts.DebugAgentNamespace, "daemonset-ns", opts.DebugAgentNamespace,
 		"Debug agent namespace, default to 'default'")
-	// falgs used for agentless mode.
+	// flags used for agentless mode.
 	cmd.Flags().BoolVar(&opts.AgentLess, "agent-less", false, "Whether to turn on agentless mode. Agentless mode: debug target pod if there isn't an agent running on the target host.")
 	cmd.Flags().StringVar(&opts.AgentImage, "agent-image", "",
 		fmt.Sprintf("Agentless mode, the container Image to run the agent container , default to %s", defaultAgentImage))
