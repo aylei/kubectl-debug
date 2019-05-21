@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -331,7 +330,7 @@ func (o *DebugOptions) Run() error {
 		// add node name as suffix
 		o.AgentPodName = o.AgentPodName + o.AgentPodNode
 		agentPod = o.getAgentPod()
-		agentPod, err = launchPod(agentPod, o.CoreClient)
+		agentPod, err = o.launchPod(agentPod)
 		if err != nil {
 			return err
 		}
@@ -342,7 +341,7 @@ func (o *DebugOptions) Run() error {
 	// which keeps the container running.
 	if o.Fork {
 		pod = copyAndStripPod(pod, containerName)
-		pod, err = launchPod(pod, o.CoreClient)
+		pod, err = o.launchPod(pod)
 		if err != nil {
 			return err
 		}
@@ -395,7 +394,7 @@ func (o *DebugOptions) Run() error {
 		if agent == nil {
 			return fmt.Errorf("there is no agent pod in the same node with your speficy pod %s", o.PodName)
 		}
-		fmt.Printf("pod %s PodIP %s, agentPodIP %s\n", o.PodName, pod.Status.PodIP, agent.Status.HostIP)
+		fmt.Fprintf(o.Out, "pod %s PodIP %s, agentPodIP %s\n", o.PodName, pod.Status.PodIP, agent.Status.HostIP)
 		err = o.runPortForward(agent)
 		if err != nil {
 			return err
@@ -404,7 +403,7 @@ func (o *DebugOptions) Run() error {
 		// than we use forward ports to connect the specified pod and that will listen
 		// on specified ports in localhost, the ports can not access until receive the
 		// ready signal
-		fmt.Println("wait for forward port to debug agent ready...")
+		fmt.Fprintln(o.Out, "wait for forward port to debug agent ready...")
 		<-o.ReadyChannel
 	}
 
@@ -437,11 +436,11 @@ func (o *DebugOptions) Run() error {
 	withCleanUp := func() error {
 		return interrupt.Chain(nil, func() {
 			if o.Fork {
-				log.Printf("Start deleting forked pod %s \r", pod.Name)
+				fmt.Fprintf(o.Out, "Start deleting forked pod %s \n\r", pod.Name)
 				err := o.CoreClient.Pods(pod.Namespace).Delete(pod.Name, v1.NewDeleteOptions(0))
 				if err != nil {
 					// we may leak pod here, but we have nothing to do except noticing the user
-					log.Printf("failed to delete forked pod %s, consider manual deletion.\r", pod.Name)
+					fmt.Fprintf(o.ErrOut, "failed to delete forked pod[Name:%s, Namespace:%s], consider manual deletion.\n\r", pod.Name, pod.Namespace)
 				}
 			}
 
@@ -453,11 +452,11 @@ func (o *DebugOptions) Run() error {
 			}
 			// delete agent pod
 			if o.AgentLess && agentPod != nil {
-				log.Printf("Start deleting agent pod %s \r", agentPod.Name)
+				fmt.Fprintf(o.Out, "Start deleting agent pod %s \n\r", pod.Name)
 				err := o.CoreClient.Pods(agentPod.Namespace).Delete(agentPod.Name, v1.NewDeleteOptions(0))
 				if err != nil {
 					// we may leak pod here, but we have nothing to do except noticing the user
-					log.Printf("failed to delete agent pod %s, consider manual deletion.\r", agentPod.Name)
+					fmt.Fprintf(o.ErrOut, "failed to delete agent pod[Name:%s, Namespace: %s], consider manual deletion.\n", agentPod.Name, agentPod.Namespace)
 				}
 			}
 		}).Run(fn)
@@ -569,23 +568,23 @@ func copyAndStripPod(pod *corev1.Pod, targetContainer string) *corev1.Pod {
 }
 
 // launchPod launch given pod until it's running
-func launchPod(pod *corev1.Pod, client coreclient.CoreV1Interface) (*corev1.Pod, error) {
-	pod, err := client.Pods(pod.Namespace).Create(pod)
+func (o *DebugOptions) launchPod(pod *corev1.Pod) (*corev1.Pod, error) {
+	pod, err := o.CoreClient.Pods(pod.Namespace).Create(pod)
 	if err != nil {
 		return pod, err
 	}
 
-	watcher, err := client.Pods(pod.Namespace).Watch(v1.SingleObject(pod.ObjectMeta))
+	watcher, err := o.CoreClient.Pods(pod.Namespace).Watch(v1.SingleObject(pod.ObjectMeta))
 	if err != nil {
 		return nil, err
 	}
 	// FIXME: hard code -> config
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	log.Printf("waiting for pod %s to run...\r", pod.Name)
+	fmt.Fprintf(o.Out, "Waiting for pod %s to run...\n", pod.Name)
 	event, err := watch.UntilWithoutRetry(ctx, watcher, conditions.PodRunning)
 	if err != nil {
-		log.Printf("Error occurred while waiting for pod to run:  %v\r", err)
+		fmt.Fprintf(o.ErrOut, "Error occurred while waiting for pod to run:  %v\n", err)
 		return nil, err
 	}
 	pod = event.Object.(*corev1.Pod)
@@ -651,8 +650,7 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 			RestartPolicy: corev1.RestartPolicyNever,
 		},
 	}
-	log.Print(fmt.Sprintln("Agent Pod info: [", "Name:", agentPod.ObjectMeta.Name, "Namespace:", agentPod.ObjectMeta.Namespace, "Image:", agentPod.Spec.Containers[0].Image, "HostPort:", agentPod.Spec.Containers[0].Ports[0].HostPort, "ContainerPort:", agentPod.Spec.Containers[0].Ports[0].ContainerPort,
-		"]"))
+	fmt.Fprintf(o.Out, "Agent Pod info: [Name:%s, Namespace:%s, Image:%s, HostPort:%d, ContainerPort:%d]\n", agentPod.ObjectMeta.Name, agentPod.ObjectMeta.Namespace, agentPod.Spec.Containers[0].Image, agentPod.Spec.Containers[0].Ports[0].HostPort, agentPod.Spec.Containers[0].Ports[0].ContainerPort)
 	return agentPod
 }
 
