@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/aylei/kubectl-debug/version"
 	"io"
 	"net/http"
 	"net/url"
@@ -51,6 +52,9 @@ const (
 
 	# override the debug config file
 	kubectl debug POD_NAME --debug-config ./debug-config.yml
+
+	# check version
+	kubectl --version
 `
 	longDesc = `
 Run a container in a running pod, this container will join the namespaces of an existing container of the pod.
@@ -137,6 +141,7 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		Short:                 "Run a container in a running pod",
 		Long:                  longDesc,
 		Example:               example,
+		Version:               version.Version(),
 		Run: func(c *cobra.Command, args []string) {
 			argsLenAtDash := c.ArgsLenAtDash()
 			cmdutil.CheckErr(opts.Complete(c, args, argsLenAtDash))
