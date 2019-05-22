@@ -156,7 +156,7 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		fmt.Sprintf("Debug config file, default to ~%s", defaultConfigLocation))
 	cmd.Flags().BoolVar(&opts.Fork, "fork", false,
 		"Fork a new pod for debugging (useful if the pod status is CrashLoopBackoff)")
-	cmd.Flags().BoolVar(&opts.PortForward, "port-foward", false,
+	cmd.Flags().BoolVar(&opts.PortForward, "port-forward", false,
 		"Whether using port-forward to connect debug-agent")
 	cmd.Flags().StringVar(&opts.DebugAgentDaemonSet, "daemonset-name", opts.DebugAgentDaemonSet,
 		"Debug agent daemonset name when using port-forward")

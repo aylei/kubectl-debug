@@ -72,7 +72,7 @@ kubectl debug POD_NAME
 kubectl debug POD_NAME --fork
 
 # if the node ip is not directly accessible, try port-forward mode
-kubectl debug POD_NAME --port-fowrad --daemonset-ns=kube-system --daemonset-name=debug-agent
+kubectl debug POD_NAME --port-forward --daemonset-ns=kube-system --daemonset-name=debug-agent
 
 # old versions of kubectl cannot discover plugins, you may execute the binary directly
 kubect-debug POD_NAME
