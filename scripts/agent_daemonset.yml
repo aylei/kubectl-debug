@@ -35,7 +35,7 @@ spec:
         volumeMounts:
         - name: docker
           mountPath: "/var/run/docker.sock"
-      hostNetwork: true
+      # hostNetwork: true
       volumes:
       - name: docker
         hostPath:
