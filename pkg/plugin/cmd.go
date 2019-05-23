@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/aylei/kubectl-debug/version"
 	"io"
 	"net/http"
 	"net/url"
@@ -13,6 +12,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/aylei/kubectl-debug/version"
 
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -70,7 +71,7 @@ You may set default configuration such as image and command in the config file, 
 	usageError = "expects 'debug POD_NAME' for debug command"
 
 	defaultAgentImage         = "aylei/debug-agent:latest"
-	defaultAgentPodNamePrefix = "debug-agent-pod-"
+	defaultAgentPodNamePrefix = "debug-agent-pod"
 	defaultAgentPodNamespace  = "default"
 )
 
@@ -285,6 +286,10 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 	if config.PortForward {
 		o.PortForward = true
 	}
+	if config.Agentless {
+		o.AgentLess = true
+	}
+
 	o.Ports = []string{strconv.Itoa(o.AgentPort)}
 	o.Config, err = configLoader.ClientConfig()
 	if err != nil {
@@ -332,8 +337,7 @@ func (o *DebugOptions) Run() error {
 	var agentPod *corev1.Pod
 	if o.AgentLess {
 		o.AgentPodNode = pod.Spec.NodeName
-		// add node name as suffix
-		o.AgentPodName = o.AgentPodName + o.AgentPodNode
+		o.AgentPodName = fmt.Sprintf("%s-%s", o.AgentPodName, uuid.NewUUID())
 		agentPod = o.getAgentPod()
 		agentPod, err = o.launchPod(agentPod)
 		if err != nil {

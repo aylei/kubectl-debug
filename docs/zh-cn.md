@@ -57,14 +57,36 @@ kubect-debug POD_NAME
 
 Any trouble? [file and issue for help](https://github.com/aylei/kubectl-debug/issues/new)
 
+
+# port-forward 模式和 agentless 模式
+
+- `port-foward`模式：默认情况下，`kubectl-debug`会直接与目标宿主机建立连接。当`kubectl-debug`无法与目标宿主机直连时，可以开启`port-forward`模式。`port-forward`模式下，本机会监听localhost:agentPort，并将数据转发至目标Pod的agentPort端口。
+
+- `agentless`模式： 默认情况下，`debug-agent`需要预先部署在集群每个节点上，会一直消耗集群资源，然而调试 Pod 是低频操作。为避免集群资源损失，在[#31](https://github.com/aylei/kubectl-debug/pull/31)增加了`agentless`模式。`agentless`模式下，`kubectl-debug`会先在目标Pod所在宿主机上启动`debug-agent`，然后再启动调试容器。用户调试结束后，`kubectl-debug`会依次删除调试容器和在目的主机启动的`degbug-agent`。
+
+
 # 默认镜像和 Entrypoint
 
 `kubectl-debug` 使用 [nicolaka/netshoot](https://github.com/nicolaka/netshoot) 作为默认镜像. 默认镜像和指令都可以通过命令行参数进行覆盖. 考虑到每次都指定有点麻烦, 也可以通过文件配置的形式进行覆盖, 编辑 `~/.kube/debug-config` 文件:
 
 ```yaml
-# debug-agent 的端口
+# debug-agent 映射到宿主机的端口
 # 默认 10027
 agentPort: 10027
+
+# 是否开启ageless模式
+# 默认 false
+agentless: true
+# agentPod 的 namespace, agentless模式可用
+# 默认 default
+agentPodNamespace: default
+# agentPod 的名称前缀，后缀是目的主机名, agentless模式可用
+# 默认 debug-agent-pod
+agentPodNamePrefix: debug-agent-pod
+# agentPod 的镜像, agentless模式可用
+# 默认 aylei/debug-agent:latest
+agentImage: aylei/debug-agent:latest
+
 # debug-agent DaemonSet 的名字, port-forward 模式时会用到
 # 默认 'debug-agent'
 debugAgentDaemonset: debug-agent
@@ -83,7 +105,5 @@ command:
 - '/bin/bash'
 - '-l
 ```
-
-当 debug-agent 无法直连时, 可以开启 port-forward 模式来绕过
 
 > `kubectl-debug` 会将容器的 entrypoint 直接覆盖掉, 这是为了避免在 debug 时不小心启动非 shell 进程.

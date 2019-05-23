@@ -14,6 +14,7 @@
 - [screenshots](#screenshots)
 - [quick start](#quick-start)
 - [build from source](#build-from-source)
+- [port-forward and agentless](#port-forward-mode-And-agentless-mode)
 - [configuration](#configurations)
 - [future works](#future-works)
 - [implementation details](#details)
@@ -96,6 +97,14 @@ make plugin
 make agent-docker
 ```
 
+# port-forward mode And agentless mode
+
+- `port-foward` mode: By default, `kubectl-debug` will directly connect with the target host. When `kubectl-debug` cannot connect to `targetHost:agentPort`, you can enable `port-forward` mode. In `port-forward` mode, the local machine listens on `localhost:agentPort` and forwards data to/from `targetPod:agentPort`.
+
+
+- `agentless` mode: By default, `debug-agent` needs to be pre-deployed on each node of the cluster, which consumes cluster resources all the time. Unfortunately, debugging Pod is a low-frequency operation. To avoid loss of cluster resources, the `agentless` mode has been added in [#31](https://github.com/aylei/kubectl-debug/pull/31). In `agentless` mode, `kubectl-debug` will first start `debug-agent` on the host where the target Pod is located, and then `debug-agent`  starts the debug container. After the user exits, `kubectl-debug` will delete the debug container and `kubectl-debug` will delete the `debug-agent` pod  at last.
+
+
 # Configurations
 
 `kubectl-debug` uses [nicolaka/netshoot](https://github.com/nicolaka/netshoot) as the default image to run debug container, and use `bash` as default entrypoint.
@@ -103,9 +112,23 @@ make agent-docker
 You can override the default image and entrypoint with cli flag, or even better, with config file `~/.kube/debug-config`:
 
 ```yaml
-# debug agent listening port
+# debug agent listening port(outside container)
 # default to 10027
 agentPort: 10027
+
+# whether using agentless mode
+# default to false
+agentless: true
+# namespace of debug-agent pod, used in agentless mode
+# default to 'default'
+agentPodNamespace: default
+# prefix of debug-agent pod, used in agentless mode
+# default to  'debug-agent-pod'
+agentPodNamePrefix: debug-agent-pod
+# image of debug-agent pod, used in agentless mode
+# default to 'aylei/debug-agent:latest'
+agentImage: aylei/debug-agent:latest
+
 # daemonset name of the debug-agent, used in port-forward
 # default to 'debug-agent'
 debugAgentDaemonset: debug-agent
