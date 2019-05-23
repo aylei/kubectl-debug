@@ -13,6 +13,7 @@ type Config struct {
 	DebugAgentNamespace string   `yaml:"debugAgentNamespace,omitempty"`
 	Command             []string `yaml:"command,omitempty"`
 	PortForward         bool     `yaml:"portForward,omitempty"`
+	Agentless           bool     `yaml:"agentless,omitempty"`
 	AgentPodNamePrefix  string   `yaml:"agentPodNamePrefix,omitempty"`
 	AgentPodNamespace   string   `yaml:"agentPodNamespace,omitempty"`
 	AgentImage          string   `yaml:"agentImage,omitempty"`
