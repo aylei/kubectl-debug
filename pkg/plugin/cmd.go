@@ -5,27 +5,35 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
 	"os/user"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/aylei/kubectl-debug/version"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 
 	term "github.com/aylei/kubectl-debug/pkg/util"
 	dockerterm "github.com/docker/docker/pkg/term"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	remotecmd "k8s.io/apimachinery/pkg/util/remotecommand"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
 	coreclient "k8s.io/client-go/kubernetes/typed/core/v1"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/portforward"
@@ -332,6 +340,10 @@ func (o *DebugOptions) Run() error {
 			fmt.Fprintf(o.ErrOut, "%s\n\r", usageString)
 		}
 		containerName = pod.Spec.Containers[0].Name
+	}
+	err = o.auth(pod)
+	if err != nil {
+		return err
 	}
 	// Launch debug launching pod in agentless mode.
 	var agentPod *corev1.Pod
@@ -701,4 +713,72 @@ func (f *defaultPortForwarder) ForwardPorts(method string, url *url.URL, opts *D
 		return err
 	}
 	return fw.ForwardPorts()
+}
+
+// statusScheme is private scheme for the decoding here until someone fixes the TODO in NewConnection
+var statusScheme = runtime.NewScheme()
+
+// ParameterCodec knows about query parameters used with the meta v1 API spec.
+var statusCodecs = serializer.NewCodecFactory(statusScheme)
+
+const HeaderSpdy31 = "SPDY/3.1"
+
+// auth checks if current user has permission to create pods/exec subresource.
+func (o *DebugOptions) auth(pod *corev1.Pod) error {
+	containerName := pod.Spec.Containers[0].Name
+	req := o.RESTClient.Post().
+		Resource("pods").
+		Name(pod.Name).
+		Namespace(pod.Namespace).
+		SubResource("exec").
+		Param("container", containerName)
+	req.VersionedParams(&corev1.PodExecOptions{
+		Container: containerName,
+		Command:   []string{"bash"},
+		Stdin:     true,
+		Stdout:    true,
+		Stderr:    true,
+		TTY:       true,
+	}, scheme.ParameterCodec)
+	transport, _, err := spdy.RoundTripperFor(o.Config)
+	if err != nil {
+		return err
+	}
+	request, err := http.NewRequest("POST", req.URL().String(), nil)
+	client := &http.Client{Transport: transport}
+	protocols := []string{
+		remotecmd.StreamProtocolV4Name,
+		remotecmd.StreamProtocolV3Name,
+		remotecmd.StreamProtocolV2Name,
+		remotecmd.StreamProtocolV1Name,
+	}
+	for i := range protocols {
+		request.Header.Add(httpstream.HeaderProtocolVersion, protocols[i])
+	}
+	resp, err := client.Do(request)
+	if err != nil {
+		return fmt.Errorf("error creating request: %v", err)
+	}
+	defer resp.Body.Close()
+	connectionHeader := strings.ToLower(resp.Header.Get(httpstream.HeaderConnection))
+	upgradeHeader := strings.ToLower(resp.Header.Get(httpstream.HeaderUpgrade))
+	if (resp.StatusCode != http.StatusSwitchingProtocols) || !strings.Contains(connectionHeader, strings.ToLower(httpstream.HeaderUpgrade)) || !strings.Contains(upgradeHeader, strings.ToLower(HeaderSpdy31)) {
+		responseError := ""
+		responseErrorBytes, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			responseError = "unable to read error from server response"
+		} else {
+			// TODO: I don't belong here, I should be abstracted from this class
+			if obj, _, err := statusCodecs.UniversalDecoder().Decode(responseErrorBytes, nil, &v1.Status{}); err == nil {
+				if status, ok := obj.(*v1.Status); ok {
+					return &apierrors.StatusError{ErrStatus: *status}
+				}
+			}
+			responseError = string(responseErrorBytes)
+			responseError = strings.TrimSpace(responseError)
+		}
+
+		return fmt.Errorf("unable to upgrade connection: %s", responseError)
+	}
+	return nil
 }
