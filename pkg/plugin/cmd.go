@@ -15,13 +15,13 @@ import (
 
 	"github.com/aylei/kubectl-debug/version"
 
-	"k8s.io/apimachinery/pkg/labels"
-
 	term "github.com/aylei/kubectl-debug/pkg/util"
 	dockerterm "github.com/docker/docker/pkg/term"
 	"github.com/spf13/cobra"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -333,6 +333,10 @@ func (o *DebugOptions) Run() error {
 		}
 		containerName = pod.Spec.Containers[0].Name
 	}
+	err = o.auth(pod)
+	if err != nil {
+		return err
+	}
 	// Launch debug launching pod in agentless mode.
 	var agentPod *corev1.Pod
 	if o.AgentLess {
@@ -472,7 +476,7 @@ func (o *DebugOptions) Run() error {
 	}
 
 	if err := t.Safe(withCleanUp); err != nil {
-		fmt.Printf("error execute remote, %v\n", err)
+		fmt.Fprintf(o.Out, "error execute remote, %v\n", err)
 		return err
 	}
 	o.wait.Wait()
@@ -676,7 +680,7 @@ func (o *DebugOptions) runPortForward(pod *corev1.Pod) error {
 			Name(pod.Name).
 			SubResource("portforward")
 		o.PortForwarder.ForwardPorts("POST", req.URL(), o)
-		fmt.Printf("end port-forward...\n")
+		fmt.Fprintln(o.Out, "end port-forward...")
 	}()
 	return nil
 }
@@ -701,4 +705,37 @@ func (f *defaultPortForwarder) ForwardPorts(method string, url *url.URL, opts *D
 		return err
 	}
 	return fw.ForwardPorts()
+}
+
+// auth checks if current user has permission to create pods/exec subresource.
+func (o *DebugOptions) auth(pod *corev1.Pod) error {
+	sarClient := o.KubeCli.AuthorizationV1()
+	sar := &authorizationv1.SelfSubjectAccessReview{
+		Spec: authorizationv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authorizationv1.ResourceAttributes{
+				Namespace:   pod.Namespace,
+				Verb:        "create",
+				Group:       "",
+				Resource:    "pods",
+				Subresource: "exec",
+				Name:        "",
+			},
+		},
+	}
+	response, err := sarClient.SelfSubjectAccessReviews().Create(sar)
+	if err != nil {
+		fmt.Fprintf(o.ErrOut, "Failed to create SelfSubjectAccessReview: %v \n", err)
+		return err
+	}
+	if !response.Status.Allowed {
+		denyReason := fmt.Sprintf("Current user has no permission to create pods/exec subresource in namespace:%s. Detail:", pod.Namespace)
+		if len(response.Status.Reason) > 0 {
+			denyReason = fmt.Sprintf("%s %v, ", denyReason, response.Status.Reason)
+		}
+		if len(response.Status.EvaluationError) > 0 {
+			denyReason = fmt.Sprintf("%s %v", denyReason, response.Status.EvaluationError)
+		}
+		return fmt.Errorf(denyReason)
+	}
+	return nil
 }
