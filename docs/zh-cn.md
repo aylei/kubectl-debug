@@ -22,7 +22,7 @@
 
 # 截图
 
-![gif](./docs/kube-debug.gif)
+![gif](/docs/kube-debug.gif)
 
 # 快速开始
 

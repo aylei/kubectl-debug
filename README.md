@@ -22,7 +22,7 @@
 
 # Screenshots
 
-![gif](./docs/kube-debug.gif)
+![gif](/docs/kube-debug.gif)
 
 # Quick Start
 
