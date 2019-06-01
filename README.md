@@ -9,7 +9,7 @@
 
 # Overview
 
-`kubectl-debug` is an out-of-tree solution for [troubleshooting running pods](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/node/troubleshoot-running-pods.md), which allows you to run a new container in running pods for debugging purpose. The new container will join the `pid`, `network`, `user` and `ipc` namespaces of the target container, so you can use arbitrary trouble-shooting tools without pre-installing them in your production container image.
+`kubectl-debug` is an out-of-tree solution for [troubleshooting running pods](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/node/troubleshoot-running-pods.md), which allows you to run a new container in running pods for debugging purpose ([examples](/docs/examples.md)). The new container will join the `pid`, `network`, `user` and `ipc` namespaces of the target container, so you can use arbitrary trouble-shooting tools without pre-installing them in your production container image.
 
 - [screenshots](#screenshots)
 - [quick start](#quick-start)
@@ -160,7 +160,7 @@ Currently, `kubectl-debug` reuse the privilege of the `pod/exec` sub resource to
 
 `kubectl-debug` is supposed to be just a troubleshooting helper, and is going be replaced by the native `kubectl debug` command when [this proposal](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/node/troubleshoot-running-pods.md) is implemented and merged in the future kubernetes release. But for now, there is still some works to do to improve `kubectl-debug`.
 
-- [ ] Security: Currently, `kubectl-debug` do authorization in the client-side, which should be moved to the server-side (debug-agent)
+- [ ] Security: currently, `kubectl-debug` do authorization in the client-side, which should be moved to the server-side (debug-agent)
 - [ ] More unit tests
 - [ ] More real world debugging example
 - [ ] e2e tests
