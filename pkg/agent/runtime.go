@@ -163,6 +163,7 @@ func (m *DebugAttacher) CreateContainer(targetId string, image string, command [
 		UsernsMode:  container.UsernsMode(m.containerMode(targetId)),
 		IpcMode:     container.IpcMode(m.containerMode(targetId)),
 		PidMode:     container.PidMode(m.containerMode(targetId)),
+		CapAdd:      strslice.StrSlice([]string{"SYS_PTRACE", "SYS_ADMIN"}),
 	}
 	ctx, cancel := m.getContextWithTimeout()
 	defer cancel()
