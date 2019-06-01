@@ -24,8 +24,7 @@ type Config struct {
 
 func Load(s string) (*Config, error) {
 	cfg := &Config{}
-
-	err := yaml.UnmarshalStrict([]byte(s), cfg)
+	err := yaml.Unmarshal([]byte(s), cfg)
 	if err != nil {
 		return nil, err
 	}
