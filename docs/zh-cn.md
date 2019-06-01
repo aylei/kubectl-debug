@@ -14,7 +14,7 @@
 - [截图](#截图)
 - [快速开始](#快速开始)
 - [构建项目](#构建项目)
-- [port-forward 和 agentless 模式](#port-forward-和-agentless-模式)
+- [port-forward 和 agentless 模式](#port-forward-模式和-agentless-模式)
 - [配置](#配置)
 - [权限](#权限)
 - [路线图](#路线图)
