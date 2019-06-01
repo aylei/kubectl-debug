@@ -37,7 +37,7 @@ brew install aylei/tap/kubectl-debug
 
 直接下载预编译的压缩包:
 ```bash
-export PLUGIN_VERSION=0.1.0
+export PLUGIN_VERSION=0.1.1
 # linux x86_64
 curl -Lo kubectl-debug.tar.gz https://github.com/aylei/kubectl-debug/releases/download/v${PLUGIN_VERSION}/kubectl-debug_${PLUGIN_VERSION}_linux_amd64.tar.gz
 # macos
@@ -47,7 +47,7 @@ tar -zxvf kubectl-debug.tar.gz kubectl-debug
 sudo mv kubectl-debug /usr/local/bin/
 ```
 
-Windows 用户可以从 [release page](https://github.com/aylei/kubectl-debug/releases/tag/v0.1.0) 进行下载并添加到 PATH 中
+Windows 用户可以从 [release page](https://github.com/aylei/kubectl-debug/releases/tag/v0.1.1) 进行下载并添加到 PATH 中
 
 ## (可选) 安装 debug-agent DaemonSet   
 

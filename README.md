@@ -35,7 +35,7 @@ brew install aylei/tap/kubectl-debug
 
 Download the binary:
 ```bash
-export PLUGIN_VERSION=0.1.0
+export PLUGIN_VERSION=0.1.1
 # linux x86_64
 curl -Lo kubectl-debug.tar.gz https://github.com/aylei/kubectl-debug/releases/download/v${PLUGIN_VERSION}/kubectl-debug_${PLUGIN_VERSION}_linux_amd64.tar.gz
 # macos
@@ -45,7 +45,7 @@ tar -zxvf kubectl-debug.tar.gz kubectl-debug
 sudo mv kubectl-debug /usr/local/bin/
 ```
 
-For windows users, download the latest archive from the [release page](https://github.com/aylei/kubectl-debug/releases/tag/v0.1.0), decompress the package and add it to your PATH.
+For windows users, download the latest archive from the [release page](https://github.com/aylei/kubectl-debug/releases/tag/v0.1.1), decompress the package and add it to your PATH.
 
 ## (Optional) Install the debug agent DaemonSet
 
