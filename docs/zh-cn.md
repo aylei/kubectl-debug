@@ -11,6 +11,8 @@
 
 `kubectl-debug` 是一个简单的 kubectl 插件, 能够帮助你便捷地进行 Kubernetes 上的 Pod 排障诊断. 背后做的事情很简单: 在运行中的 Pod 上额外起一个新容器, 并将新容器加入到目标容器的 `pid`, `network`, `user` 以及 `ipc` namespace 中, 这时我们就可以在新容器中直接用 `netstat`, `tcpdump` 这些熟悉的工具来解决问题了, 而旧容器可以保持最小化, 不需要预装任何额外的排障工具.
 
+更详细的介绍信息，可以参考这篇[博客文章](https://aleiwu.com/post/kubectl-debug-intro/)
+
 - [截图](#截图)
 - [快速开始](#快速开始)
 - [构建项目](#构建项目)
