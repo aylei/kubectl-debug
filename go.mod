@@ -4,7 +4,7 @@ go 1.12
 
 require (
 	cloud.google.com/go v0.34.0
-	contrib.go.opencensus.io/exporter/ocagent v0.2.0
+	contrib.go.opencensus.io/exporter/ocagent v0.6.0
 	github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78
 	github.com/Azure/go-autorest v11.2.8+incompatible
 	github.com/MakeNowJust/heredoc v0.0.0-20171113091838-e9091a26100e
@@ -59,7 +59,7 @@ require (
 	github.com/sirupsen/logrus v1.1.1
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/pflag v1.0.3
-	go.opencensus.io v0.18.0
+	go.opencensus.io v0.22.0
 	golang.org/x/crypto v0.0.0-20181203042331-505ab145d0a9
 	golang.org/x/net v0.0.0-20181217023233-e147a9138326
 	golang.org/x/oauth2 v0.0.0-20181203162652-d668ce993890
