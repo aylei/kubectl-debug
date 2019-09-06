@@ -78,7 +78,7 @@ kubectl debug POD_NAME --fork
 kubectl debug POD_NAME --port-forward --daemonset-ns=kube-system --daemonset-name=debug-agent
 
 # old versions of kubectl cannot discover plugins, you may execute the binary directly
-kubect-debug POD_NAME
+kubectl-debug POD_NAME
 ```
 
 * You can configure the default arguments to simplify usage, refer to [Configuration](#configuration)
