@@ -78,7 +78,7 @@ kubectl debug POD_NAME --fork
 kubectl debug POD_NAME --port-forward --daemonset-ns=kube-system --daemonset-name=debug-agent
 
 # 老版本的 kubectl 无法自动发现插件, 需要直接调用 binary
-kubect-debug POD_NAME
+kubectl-debug POD_NAME
 ```
 
 # 构建项目
