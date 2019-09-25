@@ -11,14 +11,20 @@
 
 `kubectl-debug` is an out-of-tree solution for [troubleshooting running pods](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/node/troubleshoot-running-pods.md), which allows you to run a new container in running pods for debugging purpose ([examples](/docs/examples.md)). The new container will join the `pid`, `network`, `user` and `ipc` namespaces of the target container, so you can use arbitrary trouble-shooting tools without pre-installing them in your production container image.
 
-- [screenshots](#screenshots)
-- [quick start](#quick-start)
-- [build from source](#build-from-source)
-- [port-forward and agentless](#port-forward-mode-And-agentless-mode)
-- [configuration](#configuration)
-- [roadmap](#roadmap)
-- [authorization](#authorization)
-- [contribute](#contribute)
+- [Kubectl-debug](#kubectl-debug)
+- [Overview](#overview)
+- [Screenshots](#screenshots)
+- [Quick Start](#quick-start)
+  - [Install the kubectl debug plugin](#install-the-kubectl-debug-plugin)
+  - [(Optional) Install the debug agent DaemonSet](#optional-install-the-debug-agent-daemonset)
+  - [Debug instructions](#debug-instructions)
+- [Build from source](#build-from-source)
+- [port-forward mode And agentless mode](#port-forward-mode-and-agentless-mode)
+- [Configuration](#configuration)
+- [Authorization](#authorization)
+- [Roadmap](#roadmap)
+- [Contribute](#contribute)
+- [Acknowledgement](#acknowledgement)
 
 # Screenshots
 
@@ -79,6 +85,21 @@ kubectl debug POD_NAME --port-forward --daemonset-ns=kube-system --daemonset-nam
 
 # old versions of kubectl cannot discover plugins, you may execute the binary directly
 kubectl-debug POD_NAME
+
+# use primary docker registry, set registry kubernets secret to pull image
+# the default registry-secret-name is kubectl-debug-registry-secret, the default namespace is default
+# please set the secret data source as {Username: <username>, Password: <password>}
+kubectl-debug POD_NAME --image calmkart/netshoot:latest --registry-secret-name <k8s_secret_name> --registry-secret-namespace <namespace>
+```
+
+Example:
+```bash
+# how to create a private docker registry secret
+# take the user name 'calmkart' password 'calmkart' as an example
+# refer to the official kubernetes documentation for more ways to create
+# https://kubernetes.io/docs/concepts/configuration/secret/
+echo -n '{Username: calmkart, Password: calmkart}' > ./registrySecret.txt
+kubectl create secret generic kubectl-debug-registry-secret --from-file=./registrySecret.txt
 ```
 
 * You can configure the default arguments to simplify usage, refer to [Configuration](#configuration)
@@ -146,6 +167,11 @@ image: nicolaka/netshoot:latest
 command:
 - '/bin/bash'
 - '-l'
+# private docker registry auth kuberntes secret
+# default RegistrySecretName is kubectl-debug-registry-secret
+# default namspace is default
+RegistrySecretName: my-debug-secret
+RegistrySecretNamespace: debug
 ```
 
 If the debug-agent is not accessible from host port, it is recommended to set `portForward: true` to using port-forawrd mode.

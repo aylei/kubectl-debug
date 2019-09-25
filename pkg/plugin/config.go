@@ -6,17 +6,23 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+type RegistryAuthConfig struct {
+	Username string `yaml:"username,omitempty"`
+	Password string `yaml:"password,omitempty"`
+}
 type Config struct {
-	AgentPort           int      `yaml:"agentPort,omitempty"`
-	Image               string   `yaml:"image,omitempty"`
-	DebugAgentDaemonSet string   `yaml:"debugAgentDaemonset,omitempty"`
-	DebugAgentNamespace string   `yaml:"debugAgentNamespace,omitempty"`
-	Command             []string `yaml:"command,omitempty"`
-	PortForward         bool     `yaml:"portForward,omitempty"`
-	Agentless           bool     `yaml:"agentless,omitempty"`
-	AgentPodNamePrefix  string   `yaml:"agentPodNamePrefix,omitempty"`
-	AgentPodNamespace   string   `yaml:"agentPodNamespace,omitempty"`
-	AgentImage          string   `yaml:"agentImage,omitempty"`
+	AgentPort               int      `yaml:"agentPort,omitempty"`
+	Image                   string   `yaml:"image,omitempty"`
+	RegistrySecretName      string   `yaml:"registrySecretName,omitempty"`
+	RegistrySecretNamespace string   `yaml:"registrySecretNamespace,omitempty"`
+	DebugAgentDaemonSet     string   `yaml:"debugAgentDaemonset,omitempty"`
+	DebugAgentNamespace     string   `yaml:"debugAgentNamespace,omitempty"`
+	Command                 []string `yaml:"command,omitempty"`
+	PortForward             bool     `yaml:"portForward,omitempty"`
+	Agentless               bool     `yaml:"agentless,omitempty"`
+	AgentPodNamePrefix      string   `yaml:"agentPodNamePrefix,omitempty"`
+	AgentPodNamespace       string   `yaml:"agentPodNamespace,omitempty"`
+	AgentImage              string   `yaml:"agentImage,omitempty"`
 
 	// deprecated
 	AgentPortOld int `yaml:"agent_port,omitempty"`

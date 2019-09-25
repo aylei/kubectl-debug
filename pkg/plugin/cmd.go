@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -73,6 +74,9 @@ You may set default configuration such as image and command in the config file, 
 	defaultAgentImage         = "aylei/debug-agent:latest"
 	defaultAgentPodNamePrefix = "debug-agent-pod"
 	defaultAgentPodNamespace  = "default"
+
+	defaultRegistrySecretName      = "kubectl-debug-registry-secret"
+	defaultRegistrySecretNamespace = "default"
 )
 
 // DebugOptions specify how to run debug container in a running pod
@@ -83,13 +87,15 @@ type DebugOptions struct {
 	PodName   string
 
 	// Debug options
-	Image          string
-	ContainerName  string
-	Command        []string
-	AgentPort      int
-	AppName        string
-	ConfigLocation string
-	Fork           bool
+	Image                   string
+	RegistrySecretName      string
+	RegistrySecretNamespace string
+	ContainerName           string
+	Command                 []string
+	AgentPort               int
+	AppName                 string
+	ConfigLocation          string
+	Fork                    bool
 
 	//used for agentless mode
 	AgentLess  bool
@@ -154,6 +160,10 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	//	fmt.Sprintf("Retain container after debug session closed, default to %s", defaultRetain))
 	cmd.Flags().StringVar(&opts.Image, "image", "",
 		fmt.Sprintf("Container Image to run the debug container, default to %s", defaultImage))
+	cmd.Flags().StringVar(&opts.RegistrySecretName, "registry-secret-name", "",
+		"private registry secret name, default is kubectl-debug-registry-secret")
+	cmd.Flags().StringVar(&opts.RegistrySecretNamespace, "registry-secret-namespace", "",
+		"private registry secret namespace, default is default")
 	cmd.Flags().StringVarP(&opts.ContainerName, "container", "c", "",
 		"Target container to debug, default to the first container in pod")
 	cmd.Flags().IntVarP(&opts.AgentPort, "port", "p", 0,
@@ -235,6 +245,20 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 			o.Image = config.Image
 		} else {
 			o.Image = defaultImage
+		}
+	}
+	if len(o.RegistrySecretName) < 1 {
+		if len(config.RegistrySecretName) > 0 {
+			o.RegistrySecretName = config.RegistrySecretName
+		} else {
+			o.RegistrySecretName = defaultRegistrySecretName
+		}
+	}
+	if len(o.RegistrySecretNamespace) < 1 {
+		if len(config.RegistrySecretNamespace) > 0 {
+			o.RegistrySecretNamespace = config.RegistrySecretNamespace
+		} else {
+			o.RegistrySecretNamespace = defaultRegistrySecretNamespace
 		}
 	}
 	if o.AgentPort < 1 {
@@ -442,11 +466,23 @@ func (o *DebugOptions) Run() error {
 		params := url.Values{}
 		params.Add("image", o.Image)
 		params.Add("container", containerID)
-		bytes, err := json.Marshal(o.Command)
+		var authStr string
+		registrySecret, err := o.CoreClient.Secrets(o.RegistrySecretNamespace).Get(o.RegistrySecretName, v1.GetOptions{})
+		if err != nil {
+			if errors.IsNotFound(err) {
+				authStr = ""
+			} else {
+				return err
+			}
+		} else {
+			authStr = string(registrySecret.Data["authStr"])
+		}
+		params.Add("authStr", authStr)
+		commandBytes, err := json.Marshal(o.Command)
 		if err != nil {
 			return err
 		}
-		params.Add("command", string(bytes))
+		params.Add("command", string(commandBytes))
 		uri.RawQuery = params.Encode()
 		return o.remoteExecute("POST", uri, o.Config, o.In, o.Out, o.ErrOut, t.Raw, sizeQueue)
 	}
