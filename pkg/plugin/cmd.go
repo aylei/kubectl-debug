@@ -361,11 +361,13 @@ func (o *DebugOptions) Run() error {
 	}
 
 	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
+		o.deleteAgent(agentPod)
 		return fmt.Errorf("cannot debug in a completed pod; current phase is %s", pod.Status.Phase)
 	}
 
 	containerID, err := o.getContainerIDByName(pod, containerName)
 	if err != nil {
+		o.deleteAgent(agentPod)
 		return err
 	}
 
@@ -410,6 +412,7 @@ func (o *DebugOptions) Run() error {
 		fmt.Fprintf(o.Out, "pod %s PodIP %s, agentPodIP %s\n", o.PodName, pod.Status.PodIP, agent.Status.HostIP)
 		err = o.runPortForward(agent)
 		if err != nil {
+			o.deleteAgent(agentPod)
 			return err
 		}
 		// client can't access the node ip in the k8s cluster sometimes,
@@ -466,11 +469,7 @@ func (o *DebugOptions) Run() error {
 			// delete agent pod
 			if o.AgentLess && agentPod != nil {
 				fmt.Fprintf(o.Out, "Start deleting agent pod %s \n\r", pod.Name)
-				err := o.CoreClient.Pods(agentPod.Namespace).Delete(agentPod.Name, v1.NewDeleteOptions(0))
-				if err != nil {
-					// we may leak pod here, but we have nothing to do except noticing the user
-					fmt.Fprintf(o.ErrOut, "failed to delete agent pod[Name:%s, Namespace: %s], consider manual deletion.\n", agentPod.Name, agentPod.Namespace)
-				}
+				o.deleteAgent(agentPod)
 			}
 		}).Run(fn)
 	}
@@ -738,4 +737,12 @@ func (o *DebugOptions) auth(pod *corev1.Pod) error {
 		return fmt.Errorf(denyReason)
 	}
 	return nil
+}
+
+// delete the agent pod
+func (o *DebugOptions) deleteAgent(agentPod *corev1.Pod) {
+	err := o.CoreClient.Pods(agentPod.Namespace).Delete(agentPod.Name, v1.NewDeleteOptions(0))
+	if err != nil {
+		fmt.Fprintf(o.ErrOut, "failed to delete agent pod[Name:%s, Namespace: %s], consider manual deletion.\n", agentPod.Name, agentPod.Namespace)
+	}
 }
