@@ -488,8 +488,9 @@ func (o *DebugOptions) getContainerIDByName(pod *corev1.Pod, containerName strin
 		if containerStatus.Name != containerName {
 			continue
 		}
-		if !containerStatus.Ready {
-			return "", fmt.Errorf("container [%s] not ready", containerName)
+		// #52 if a pod is running but not ready(because of readiness probe), we can connect
+		if containerStatus.State.Running == nil {
+			return "", fmt.Errorf("container [%s] not running", containerName)
 		}
 		return containerStatus.ContainerID, nil
 	}
