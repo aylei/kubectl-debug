@@ -742,6 +742,10 @@ func (o *DebugOptions) auth(pod *corev1.Pod) error {
 
 // delete the agent pod
 func (o *DebugOptions) deleteAgent(agentPod *corev1.Pod) {
+	// only with agentless flag we can delete the agent pod
+	if !o.AgentLess {
+		return
+	}
 	err := o.CoreClient.Pods(agentPod.Namespace).Delete(agentPod.Name, v1.NewDeleteOptions(0))
 	if err != nil {
 		fmt.Fprintf(o.ErrOut, "failed to delete agent pod[Name:%s, Namespace: %s], consider manual deletion.\n", agentPod.Name, agentPod.Namespace)
