@@ -11,14 +11,20 @@
 
 `kubectl-debug` is an out-of-tree solution for [troubleshooting running pods](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/node/troubleshoot-running-pods.md), which allows you to run a new container in running pods for debugging purpose ([examples](/docs/examples.md)). The new container will join the `pid`, `network`, `user` and `ipc` namespaces of the target container, so you can use arbitrary trouble-shooting tools without pre-installing them in your production container image.
 
-- [screenshots](#screenshots)
-- [quick start](#quick-start)
-- [build from source](#build-from-source)
-- [port-forward and agentless](#port-forward-mode-And-agentless-mode)
-- [configuration](#configuration)
-- [roadmap](#roadmap)
-- [authorization](#authorization)
-- [contribute](#contribute)
+- [Kubectl-debug](#kubectl-debug)
+- [Overview](#overview)
+- [Screenshots](#screenshots)
+- [Quick Start](#quick-start)
+  - [Install the kubectl debug plugin](#install-the-kubectl-debug-plugin)
+  - [(Optional) Install the debug agent DaemonSet](#optional-install-the-debug-agent-daemonset)
+  - [Debug instructions](#debug-instructions)
+- [Build from source](#build-from-source)
+- [port-forward mode And agentless mode](#port-forward-mode-and-agentless-mode)
+- [Configuration](#configuration)
+- [Authorization](#authorization)
+- [Roadmap](#roadmap)
+- [Contribute](#contribute)
+- [Acknowledgement](#acknowledgement)
 
 # Screenshots
 
@@ -54,9 +60,14 @@ For windows users, download the latest archive from the [release page](https://g
 While convenient, creating pod before debugging can be time consuming. You can install the debug agent DaemonSet in advance to skip this:
 
 ```bash
+# if your kubernetes version is v1.16 or newer
 kubectl apply -f https://raw.githubusercontent.com/aylei/kubectl-debug/master/scripts/agent_daemonset.yml
+# if your kubernetes is old version(<v1.16), you should change the apiVersion to extensions/v1beta1, As follows
+wget https://raw.githubusercontent.com/aylei/kubectl-debug/master/scripts/agent_daemonset.yml
+sed -i '' '1s/apps\/v1/extensions\/v1beta1/g' agent_daemonset.yml
+kubectl apply -f agent_daemonset.yml
 # or using helm
-helm install -n=debug-agent ./contrib/helm/kubectl-debug
+helm install kubectl-debug -n=debug-agent ./contrib/helm/kubectl-debug
 ```
 
 ## Debug instructions
