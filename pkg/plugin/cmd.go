@@ -345,6 +345,7 @@ func (o *DebugOptions) Run() error {
 		agentPod = o.getAgentPod()
 		agentPod, err = o.launchPod(agentPod)
 		if err != nil {
+			fmt.Fprintf(o.Out, "the agentPod is not running, you should check the reason and delete the failed agentPod and retry.\n")
 			return err
 		}
 	}
@@ -356,6 +357,8 @@ func (o *DebugOptions) Run() error {
 		pod = copyAndStripPod(pod, containerName)
 		pod, err = o.launchPod(pod)
 		if err != nil {
+			fmt.Fprintf(o.Out, "the ForkedPod is not running, you should check the reason and delete the failed ForkedPod and retry\n")
+			o.deleteAgent(agentPod)
 			return err
 		}
 	}
