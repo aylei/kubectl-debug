@@ -2,21 +2,23 @@ package agent
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
-	"github.com/aylei/kubectl-debug/pkg/util"
+	"io"
+	"io/ioutil"
+	"log"
+	"time"
+
+	term "github.com/aylei/kubectl-debug/pkg/util"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/strslice"
 	dockerclient "github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
-	"io"
-	"io/ioutil"
 	kubetype "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubernetes/pkg/kubelet/dockershim/libdocker"
 	kubeletremote "k8s.io/kubernetes/pkg/kubelet/server/remotecommand"
-	"log"
-	"time"
 )
 
 // RuntimeManager is responsible for docker operation
@@ -41,6 +43,7 @@ func NewRuntimeManager(host string, timeout time.Duration) (*RuntimeManager, err
 type DebugAttacher struct {
 	runtime *RuntimeManager
 	image   string
+	authStr string
 	command []string
 	client  *dockerclient.Client
 
@@ -51,14 +54,15 @@ type DebugAttacher struct {
 }
 
 func (a *DebugAttacher) AttachContainer(name string, uid kubetype.UID, container string, in io.Reader, out, err io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error {
-	return a.DebugContainer(container, a.image, a.command, in, out, err, tty, resize)
+	return a.DebugContainer(container, a.image, a.authStr, a.command, in, out, err, tty, resize)
 }
 
 // GetAttacher returns an implementation of Attacher
-func (m *RuntimeManager) GetAttacher(image string, command []string, context context.Context, cancel context.CancelFunc) kubeletremote.Attacher {
+func (m *RuntimeManager) GetAttacher(image string, authStr string, command []string, context context.Context, cancel context.CancelFunc) kubeletremote.Attacher {
 	return &DebugAttacher{
 		runtime:       m,
 		image:         image,
+		authStr:       authStr,
 		command:       command,
 		context:       context,
 		client:        m.client,
@@ -68,7 +72,7 @@ func (m *RuntimeManager) GetAttacher(image string, command []string, context con
 }
 
 // DebugContainer executes the main debug flow
-func (m *DebugAttacher) DebugContainer(container, image string, command []string, stdin io.Reader, stdout, stderr io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error {
+func (m *DebugAttacher) DebugContainer(container, image string, authStr string, command []string, stdin io.Reader, stdout, stderr io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error {
 
 	log.Printf("Accept new debug reqeust:\n\t target container: %s \n\t image: %s \n\t command: %v \n", container, image, command)
 
@@ -100,7 +104,7 @@ func (m *DebugAttacher) DebugContainer(container, image string, command []string
 
 	// step 1: pull image
 	stdout.Write([]byte(fmt.Sprintf("pulling image %s... \n\r", image)))
-	err := m.PullImage(image, stdout)
+	err := m.PullImage(image, authStr, stdout)
 	if err != nil {
 		return err
 	}
@@ -174,9 +178,9 @@ func (m *DebugAttacher) CreateContainer(targetId string, image string, command [
 	return &body, nil
 }
 
-func (m *DebugAttacher) PullImage(image string, stdout io.WriteCloser) error {
-	// image pull can be time consuming, just pass the request context
-	out, err := m.client.ImagePull(m.context, image, types.ImagePullOptions{})
+func (m *DebugAttacher) PullImage(image string, authStr string, stdout io.WriteCloser) error {
+	authBytes := base64.URLEncoding.EncodeToString([]byte(authStr))
+	out, err := m.client.ImagePull(m.context, image, types.ImagePullOptions{RegistryAuth: string(authBytes)})
 	if err != nil {
 		return err
 	}

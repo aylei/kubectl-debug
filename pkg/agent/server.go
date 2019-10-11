@@ -3,14 +3,15 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	remoteapi "k8s.io/apimachinery/pkg/util/remotecommand"
-	kubeletremote "k8s.io/kubernetes/pkg/kubelet/server/remotecommand"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"time"
+
+	remoteapi "k8s.io/apimachinery/pkg/util/remotecommand"
+	kubeletremote "k8s.io/kubernetes/pkg/kubelet/server/remotecommand"
 )
 
 const (
@@ -89,7 +90,7 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "cannot parse command", 400)
 		return
 	}
-
+	authStr := req.FormValue("authStr")
 	streamOpts := &kubeletremote.Options{
 		Stdin:  true,
 		Stdout: true,
@@ -104,7 +105,7 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 	kubeletremote.ServeAttach(
 		w,
 		req,
-		s.runtimeApi.GetAttacher(image, commandSlice, context, cancel),
+		s.runtimeApi.GetAttacher(image, authStr, commandSlice, context, cancel),
 		"",
 		"",
 		dockerContainerId,
