@@ -58,9 +58,14 @@ Windows 用户可以从 [release page](https://github.com/aylei/kubectl-debug/re
 `agentless` 虽然方便, 但会让 debug 的启动速度显著下降, 你可以通过预先安装 debug-agent 的 DaemonSet 来使用 agent 模式, 加快启动速度:
 
 ```bash
+# 如果你的kubernetes版本为v1.16或更高
 kubectl apply -f https://raw.githubusercontent.com/aylei/kubectl-debug/master/scripts/agent_daemonset.yml
-# 或者使用 helm 安装
-helm install -n=debug-agent ./contrib/helm/kubectl-debug
+# 如果你使用的是旧版本的kubernetes(<v1.16), 你需要先将apiVersion修改为extensions/v1beta1, 可以如下操作
+wget https://raw.githubusercontent.com/aylei/kubectl-debug/master/scripts/agent_daemonset.yml
+sed -i '' '1s/apps\/v1/extensions\/v1beta1/g' agent_daemonset.yml
+kubectl apply -f agent_daemonset.yml
+# 或者使用helm安装
+helm install kubectl-debug -n=debug-agent ./contrib/helm/kubectl-debug
 ```
 
 简单使用:

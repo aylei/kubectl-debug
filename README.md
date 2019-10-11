@@ -60,9 +60,14 @@ For windows users, download the latest archive from the [release page](https://g
 While convenient, creating pod before debugging can be time consuming. You can install the debug agent DaemonSet in advance to skip this:
 
 ```bash
+# if your kubernetes version is v1.16 or newer
 kubectl apply -f https://raw.githubusercontent.com/aylei/kubectl-debug/master/scripts/agent_daemonset.yml
+# if your kubernetes is old version(<v1.16), you should change the apiVersion to extensions/v1beta1, As follows
+wget https://raw.githubusercontent.com/aylei/kubectl-debug/master/scripts/agent_daemonset.yml
+sed -i '' '1s/apps\/v1/extensions\/v1beta1/g' agent_daemonset.yml
+kubectl apply -f agent_daemonset.yml
 # or using helm
-helm install -n=debug-agent ./contrib/helm/kubectl-debug
+helm install kubectl-debug -n=debug-agent ./contrib/helm/kubectl-debug
 ```
 
 ## Debug instructions

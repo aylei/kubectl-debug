@@ -1,4 +1,8 @@
+{{- if ge .Capabilities.KubeVersion.Minor "16" }}
+apiVersion: apps/v1
+{{- else }}
 apiVersion: extensions/v1beta1
+{{- end }}
 kind: DaemonSet
 metadata:
   name: {{ template "kubectl-debug.fullname" . }}-agent
