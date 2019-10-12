@@ -405,7 +405,7 @@ func (o *DebugOptions) Run() error {
 		sizeQueue = t.MonitorSize(t.GetSize())
 		// unset p.Err if it was previously set because both stdout and stderr go over p.Out when tty is
 		// true
-		o.ErrOut = nil
+		// o.ErrOut = nil
 	}
 
 	if o.PortForward {
@@ -787,6 +787,6 @@ func (o *DebugOptions) deleteAgent(agentPod *corev1.Pod) {
 	}
 	err := o.CoreClient.Pods(agentPod.Namespace).Delete(agentPod.Name, v1.NewDeleteOptions(0))
 	if err != nil {
-		fmt.Fprintf(o.ErrOut, "failed to delete agent pod[Name:%s, Namespace: %s], consider manual deletion.\n", agentPod.Name, agentPod.Namespace)
+		fmt.Fprintf(o.ErrOut, "failed to delete agent pod[Name:%s, Namespace: %s], consider manual deletion.\nerror msg: %v", agentPod.Name, agentPod.Namespace, err)
 	}
 }
