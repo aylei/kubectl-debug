@@ -21,6 +21,7 @@ import (
 	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -71,9 +72,13 @@ You may set default configuration such as image and command in the config file, 
 
 	usageError = "expects 'debug POD_NAME' for debug command"
 
-	defaultAgentImage         = "aylei/debug-agent:latest"
-	defaultAgentPodNamePrefix = "debug-agent-pod"
-	defaultAgentPodNamespace  = "default"
+	defaultAgentImage             = "aylei/debug-agent:latest"
+	defaultAgentPodNamePrefix     = "debug-agent-pod"
+	defaultAgentPodNamespace      = "default"
+	defaultAgentPodCpuRequests    = ""
+	defaultAgentPodCpuLimits      = ""
+	defaultAgentPodMemoryRequests = ""
+	defaultAgentPodMemoryLimits   = ""
 
 	defaultRegistrySecretName      = "kubectl-debug-registry-secret"
 	defaultRegistrySecretNamespace = "default"
@@ -104,6 +109,7 @@ type DebugOptions struct {
 	AgentPodName      string
 	AgentPodNamespace string
 	AgentPodNode      string
+	AgentPodResource  agentPodResources
 
 	Flags      *genericclioptions.ConfigFlags
 	CoreClient coreclient.CoreV1Interface
@@ -125,6 +131,13 @@ type DebugOptions struct {
 	genericclioptions.IOStreams
 
 	wait sync.WaitGroup
+}
+
+type agentPodResources struct {
+	CpuRequests    string
+	CpuLimits      string
+	MemoryRequests string
+	MemoryLimits   string
 }
 
 // NewDebugOptions new debug options
@@ -186,6 +199,14 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		fmt.Sprintf("Agentless mode, pod name prefix , default to %s", defaultAgentPodNamePrefix))
 	cmd.Flags().StringVar(&opts.AgentPodNamespace, "agent-pod-namespace", "",
 		fmt.Sprintf("Agentless mode, agent pod namespace, default to %s", defaultAgentPodNamespace))
+	cmd.Flags().StringVar(&opts.AgentPodResource.CpuRequests, "agent-pod-cpu-requests", "",
+		fmt.Sprintf("Agentless mode, agent pod cpu requests, default is not set"))
+	cmd.Flags().StringVar(&opts.AgentPodResource.MemoryRequests, "agent-pod-memory-requests", "",
+		fmt.Sprintf("Agentless mode, agent pod memory requests, default is not set"))
+	cmd.Flags().StringVar(&opts.AgentPodResource.CpuLimits, "agent-pod-cpu-limits", "",
+		fmt.Sprintf("Agentless mode, agent pod cpu limits, default is not set"))
+	cmd.Flags().StringVar(&opts.AgentPodResource.MemoryLimits, "agent-pod-memory-limits", "",
+		fmt.Sprintf("Agentless mode, agent pod memory limits, default is not set"))
 	opts.Flags.AddFlags(cmd.Flags())
 
 	return cmd
@@ -304,6 +325,38 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 			o.AgentPodNamespace = config.AgentPodNamespace
 		} else {
 			o.AgentPodNamespace = defaultAgentPodNamespace
+		}
+	}
+
+	if len(o.AgentPodResource.CpuRequests) < 1 {
+		if len(config.AgentPodCpuRequests) > 0 {
+			o.AgentPodResource.CpuRequests = config.AgentPodCpuRequests
+		} else {
+			o.AgentPodResource.CpuRequests = defaultAgentPodCpuRequests
+		}
+	}
+
+	if len(o.AgentPodResource.MemoryRequests) < 1 {
+		if len(config.AgentPodMemoryRequests) > 0 {
+			o.AgentPodResource.MemoryRequests = config.AgentPodMemoryRequests
+		} else {
+			o.AgentPodResource.MemoryRequests = defaultAgentPodMemoryRequests
+		}
+	}
+
+	if len(o.AgentPodResource.CpuLimits) < 1 {
+		if len(config.AgentPodCpuLimits) > 0 {
+			o.AgentPodResource.CpuLimits = config.AgentPodCpuLimits
+		} else {
+			o.AgentPodResource.CpuLimits = defaultAgentPodCpuLimits
+		}
+	}
+
+	if len(o.AgentPodResource.MemoryLimits) < 1 {
+		if len(config.AgentPodMemoryLimits) > 0 {
+			o.AgentPodResource.MemoryLimits = config.AgentPodMemoryLimits
+		} else {
+			o.AgentPodResource.MemoryLimits = defaultAgentPodMemoryLimits
 		}
 	}
 
@@ -674,6 +727,7 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 						TimeoutSeconds:      1,
 						FailureThreshold:    3,
 					},
+					Resources: o.buildAgentResourceRequirements(),
 					VolumeMounts: []corev1.VolumeMount{
 						{
 							Name:      "docker",
@@ -789,4 +843,33 @@ func (o *DebugOptions) deleteAgent(agentPod *corev1.Pod) {
 	if err != nil {
 		fmt.Fprintf(o.ErrOut, "failed to delete agent pod[Name:%s, Namespace: %s], consider manual deletion.\n", agentPod.Name, agentPod.Namespace)
 	}
+}
+
+// build the agent pod Resource Requirements
+func (o *DebugOptions) buildAgentResourceRequirements() corev1.ResourceRequirements {
+	return getResourceRequirements(getResourceList(o.AgentPodResource.CpuRequests, o.AgentPodResource.MemoryRequests), getResourceList(o.AgentPodResource.CpuLimits, o.AgentPodResource.MemoryLimits))
+}
+
+func getResourceList(cpu, memory string) corev1.ResourceList {
+	// catch error in resource.MustParse
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Printf("Parse Resource list error: %v\n", err)
+		}
+	}()
+	res := corev1.ResourceList{}
+	if cpu != "" {
+		res[corev1.ResourceCPU] = resource.MustParse(cpu)
+	}
+	if memory != "" {
+		res[corev1.ResourceMemory] = resource.MustParse(memory)
+	}
+	return res
+}
+
+func getResourceRequirements(requests, limits corev1.ResourceList) corev1.ResourceRequirements {
+	res := corev1.ResourceRequirements{}
+	res.Requests = requests
+	res.Limits = limits
+	return res
 }

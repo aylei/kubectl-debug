@@ -89,6 +89,10 @@ kubectl-debug POD_NAME
 # secret data原文请设置为 {Username: <username>, Password: <password>}
 # 默认secret_name为kubectl-debug-registry-secret,默认namspace为default
 kubectl-debug POD_NAME --image calmkart/netshoot:latest --registry-secret-name <k8s_secret_name> --registry-secret-namespace <namespace>
+
+# 在agentless模式中,你可以设置agent pod的resource资源限制,如下示例
+# 若不设置,默认为空
+kubectl-debug POD_NAME --agentless --agent-pod-cpu-requests=250m --agent-pod-cpu-limits=500m --agent-pod-memory-requests=200Mi --agent-pod-memory-limits=500Mi
 ```
 
 举例:
@@ -168,6 +172,12 @@ command:
 # 默认RegistrySecretName为kubectl-debug-registry-secret,默认RegistrySecretNamespace为default
 RegistrySecretName: my-debug-secret
 RegistrySecretNamespace: debug
+# 在agentless模式下可以设置agent pod的resource资源限制
+# 若不设置,默认为空
+agentCpuRequests: ""
+agentCpuLimits: ""
+agentMemoryRequests: ""
+agentMemoryLimits: ""
 ```
 
 > `kubectl-debug` 会将容器的 entrypoint 直接覆盖掉, 这是为了避免在 debug 时不小心启动非 shell 进程.
