@@ -77,6 +77,9 @@ You may set default configuration such as image and command in the config file, 
 
 	defaultRegistrySecretName      = "kubectl-debug-registry-secret"
 	defaultRegistrySecretNamespace = "default"
+
+	defaultPortForward = true
+	defaultAgentless   = true
 )
 
 // DebugOptions specify how to run debug container in a running pod
@@ -172,14 +175,15 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		fmt.Sprintf("Debug config file, default to ~%s", defaultConfigLocation))
 	cmd.Flags().BoolVar(&opts.Fork, "fork", false,
 		"Fork a new pod for debugging (useful if the pod status is CrashLoopBackoff)")
-	cmd.Flags().BoolVar(&opts.PortForward, "port-forward", false,
-		"Whether using port-forward to connect debug-agent")
+	cmd.Flags().BoolVar(&opts.PortForward, "port-forward", true,
+		fmt.Sprintf("Whether using port-forward to connect debug-agent, default to %t", defaultPortForward))
 	cmd.Flags().StringVar(&opts.DebugAgentDaemonSet, "daemonset-name", opts.DebugAgentDaemonSet,
 		"Debug agent daemonset name when using port-forward")
 	cmd.Flags().StringVar(&opts.DebugAgentNamespace, "daemonset-ns", opts.DebugAgentNamespace,
 		"Debug agent namespace, default to 'default'")
 	// flags used for agentless mode.
-	cmd.Flags().BoolVarP(&opts.AgentLess, "agentless", "a", false, "Whether to turn on agentless mode. Agentless mode: debug target pod if there isn't an agent running on the target host.")
+	cmd.Flags().BoolVarP(&opts.AgentLess, "agentless", "a", true,
+		fmt.Sprintf("Whether to turn on agentless mode. Agentless mode: debug target pod if there isn't an agent running on the target host, default to %t", defaultAgentless))
 	cmd.Flags().StringVar(&opts.AgentImage, "agent-image", "",
 		fmt.Sprintf("Agentless mode, the container Image to run the agent container , default to %s", defaultAgentImage))
 	cmd.Flags().StringVar(&opts.AgentPodName, "agent-pod-name-prefix", "",
