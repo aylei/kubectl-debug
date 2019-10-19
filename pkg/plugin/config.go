@@ -23,6 +23,10 @@ type Config struct {
 	AgentPodNamePrefix      string   `yaml:"agentPodNamePrefix,omitempty"`
 	AgentPodNamespace       string   `yaml:"agentPodNamespace,omitempty"`
 	AgentImage              string   `yaml:"agentImage,omitempty"`
+	AgentPodCpuRequests     string   `yaml:"agentCpuRequests,omitempty"`
+	AgentPodMemoryRequests  string   `yaml:"agentMemoryRequests,omitempty"`
+	AgentPodCpuLimits       string   `yaml:"agentCpuLimits,omitempty"`
+	AgentPodMemoryLimits    string   `yaml:"agentMemoryLimits,omitempty"`
 
 	// deprecated
 	AgentPortOld int `yaml:"agent_port,omitempty"`

@@ -95,6 +95,9 @@ kubectl-debug POD_NAME
 # the default registry-secret-name is kubectl-debug-registry-secret, the default namespace is default
 # please set the secret data source as {Username: <username>, Password: <password>}
 kubectl-debug POD_NAME --image calmkart/netshoot:latest --registry-secret-name <k8s_secret_name> --registry-secret-namespace <namespace>
+# in agentless mode, you can set the agent pod's resource limits/requests, for example:
+# default is not set
+kubectl-debug POD_NAME --agentless --agent-pod-cpu-requests=250m --agent-pod-cpu-limits=500m --agent-pod-memory-requests=200Mi --agent-pod-memory-limits=500Mi
 ```
 
 Example:
@@ -177,6 +180,12 @@ command:
 # default namspace is default
 RegistrySecretName: my-debug-secret
 RegistrySecretNamespace: debug
+# in agentless mode, you can set the agent pod's resource limits/requests:
+# default is not set
+agentCpuRequests: ""
+agentCpuLimits: ""
+agentMemoryRequests: ""
+agentMemoryLimits: ""
 ```
 
 If the debug-agent is not accessible from host port, it is recommended to set `portForward: true` to using port-forawrd mode.
