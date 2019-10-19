@@ -19,7 +19,7 @@
   - [(Optional) Install the debug agent DaemonSet](#optional-install-the-debug-agent-daemonset)
   - [Debug instructions](#debug-instructions)
 - [Build from source](#build-from-source)
-- [port-forward mode And agentless mode](#port-forward-mode-and-agentless-mode)
+- [port-forward mode And agentless mode(Default opening)](#port-forward-mode-and-agentless-modedefault-opening)
 - [Configuration](#configuration)
 - [Authorization](#authorization)
 - [Roadmap](#roadmap)
@@ -55,9 +55,9 @@ For windows users, download the latest archive from the [release page](https://g
 
 ## (Optional) Install the debug agent DaemonSet
 
-`kubectl-debug` requires an agent pod to communicate with the container runtime. In the [agentless mode](#port-forward-mode-And-agentless-mode), the agent pod can be created when a debug session starts and to be cleaned up when the session ends.
+`kubectl-debug` requires an agent pod to communicate with the container runtime. In the [agentless mode](#port-forward-mode-And-agentless-mode), the agent pod can be created when a debug session starts and to be cleaned up when the session ends.(Turn on agentless mode by default)
 
-While convenient, creating pod before debugging can be time consuming. You can install the debug agent DaemonSet in advance to skip this:
+While convenient, creating pod before debugging can be time consuming. You can install the debug agent DaemonSet and use --agentless=false params in advance to skip this:
 
 ```bash
 # if your kubernetes version is v1.16 or newer
@@ -68,6 +68,8 @@ sed -i '' '1s/apps\/v1/extensions\/v1beta1/g' agent_daemonset.yml
 kubectl apply -f agent_daemonset.yml
 # or using helm
 helm install kubectl-debug -n=debug-agent ./contrib/helm/kubectl-debug
+# use daemonset agent mode(close agentless mode)
+kubectl debug --agentless=false POD_NAME
 ```
 
 ## Debug instructions
@@ -77,16 +79,17 @@ Try it out!
 ```bash
 # kubectl 1.12.0 or higher
 kubectl debug -h
-# you can omit --agentless to reduce start time if you have installed the debug agent daemonset
-# we will omit this flag in the following commands
-kubectl debug POD_NAME --agentless
+# if you installed the debug agent's daemonset, you can use --agentless=false to speed up the startup.
+# the default agentless mode will be used in following commands
+kubectl debug POD_NAME
 
 # in case of your pod stuck in `CrashLoopBackoff` state and cannot be connected to,
 # you can fork a new pod and diagnose the problem in the forked pod
 kubectl debug POD_NAME --fork
 
-# if the node ip is not directly accessible, try port-forward mode
-kubectl debug POD_NAME --port-forward --daemonset-ns=kube-system --daemonset-name=debug-agent
+# in order to enable node without public IP or direct access (firewall and other reasons) to access, port-forward mode is enabled by default.
+# if you don't need to turn on port-forward mode, you can use --port-forward false to turn off it.
+kubectl debug POD_NAME --port-forward=false --agentless=false --daemonset-ns=kube-system --daemonset-name=debug-agent
 
 # old versions of kubectl cannot discover plugins, you may execute the binary directly
 kubectl-debug POD_NAME
@@ -128,11 +131,11 @@ make plugin
 make agent-docker
 ```
 
-# port-forward mode And agentless mode
+# port-forward mode And agentless mode(Default opening)
 
 - `port-foward` mode: By default, `kubectl-debug` will directly connect with the target host. When `kubectl-debug` cannot connect to `targetHost:agentPort`, you can enable `port-forward` mode. In `port-forward` mode, the local machine listens on `localhost:agentPort` and forwards data to/from `targetPod:agentPort`.
 
-- `agentless` mode: By default, `debug-agent` needs to be pre-deployed on each node of the cluster, which consumes cluster resources all the time. Unfortunately, debugging Pod is a low-frequency operation. To avoid loss of cluster resources, the `agentless` mode has been added in [#31](https://github.com/aylei/kubectl-debug/pull/31). In `agentless` mode, `kubectl-debug` will first start `debug-agent` on the host where the target Pod is located, and then `debug-agent`  starts the debug container. After the user exits, `kubectl-debug` will delete the debug container and `kubectl-debug` will delete the `debug-agent` pod  at last.
+- `agentless` mode: By default, `debug-agent` needs to be pre-deployed on each node of the cluster, which consumes cluster resources all the time. Unfortunately, debugging Pod is a low-frequency operation. To avoid loss of cluster resources, the `agentless` mode has been added in [#31](https://github.com/aylei/kubectl-debug/pull/31). In `agentless` mode, `kubectl-debug` will first start `debug-agent` on the host where the target Pod is located, and then `debug-agent`  starts the debug container. After the user exits, `kubectl-debug` will delete the debug container and `kubectl-debug` will delete the `debug-agent` pod at last.
 
 # Configuration
 
@@ -146,7 +149,7 @@ You can override the default image and entrypoint with cli flag, or even better,
 agentPort: 10027
 
 # whether using agentless mode
-# default to false
+# default to true
 agentless: true
 # namespace of debug-agent pod, used in agentless mode
 # default to 'default'
@@ -165,7 +168,7 @@ debugAgentDaemonset: debug-agent
 # default to 'default'
 debugAgentNamespace: kube-system
 # whether using port-forward when connecting debug-agent
-# default false
+# default true
 portForward: true
 # image of the debug container
 # default as showed

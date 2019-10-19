@@ -53,9 +53,9 @@ Windows 用户可以从 [release page](https://github.com/aylei/kubectl-debug/re
 
 ## (可选) 安装 debug-agent DaemonSet   
 
-`kubectl-debug` 包含两部分, 一部分是用户侧的 kubectl 插件, 另一部分是部署在所有 k8s 节点上的 agent(用于启动"新容器", 同时也作为 SPDY 连接的中继). 在 `agentless` 中, `kubectl-debug` 会在 debug 开始时创建 debug-agent Pod, 并在结束后自动清理.
+`kubectl-debug` 包含两部分, 一部分是用户侧的 kubectl 插件, 另一部分是部署在所有 k8s 节点上的 agent(用于启动"新容器", 同时也作为 SPDY 连接的中继). 在 `agentless` 中, `kubectl-debug` 会在 debug 开始时创建 debug-agent Pod, 并在结束后自动清理.(默认开启agentless模式)
 
-`agentless` 虽然方便, 但会让 debug 的启动速度显著下降, 你可以通过预先安装 debug-agent 的 DaemonSet 来使用 agent 模式, 加快启动速度:
+`agentless` 虽然方便, 但会让 debug 的启动速度显著下降, 你可以通过预先安装 debug-agent 的 DaemonSet 并配合 --agentless=false 参数来使用 agent 模式, 加快启动速度:
 
 ```bash
 # 如果你的kubernetes版本为v1.16或更高
@@ -66,21 +66,24 @@ sed -i '' '1s/apps\/v1/extensions\/v1beta1/g' agent_daemonset.yml
 kubectl apply -f agent_daemonset.yml
 # 或者使用helm安装
 helm install kubectl-debug -n=debug-agent ./contrib/helm/kubectl-debug
+# 使用daemonset agent模式(关闭agentless模式)
+kubectl debug --agentless=false POD_NAME
 ```
 
 简单使用:
 ```bash
 # kubectl 1.12.0 或更高的版本, 可以直接使用:
 kubectl debug -h
-# 假如安装了 debug-agent 的 daemonset, 可以略去 --agentless 来加快启动速度
-# 之后的命令里会略去 --agentless
-kubectl debug POD_NAME --agentless
+# 假如安装了 debug-agent 的 daemonset, 可以使用 --agentless=false 来加快启动速度
+# 之后的命令里会使用默认的agentless模式
+kubectl debug POD_NAME
 
 # 假如 Pod 处于 CrashLookBackoff 状态无法连接, 可以复制一个完全相同的 Pod 来进行诊断
 kubectl debug POD_NAME --fork
 
-# 假如 Node 没有公网 IP 或无法直接访问(防火墙等原因), 请使用 port-forward 模式
-kubectl debug POD_NAME --port-forward --daemonset-ns=kube-system --daemonset-name=debug-agent
+# 为了使 没有公网 IP 或无法直接访问(防火墙等原因)的 NODE 能够访问, 默认开启 port-forward 模式
+# 如果不需要开启port-forward模式, 可以使用 --port-forward=false 来关闭
+kubectl debug POD_NAME --port-forward=false --agentless=false --daemonset-ns=kube-system --daemonset-name=debug-agent
 
 # 老版本的 kubectl 无法自动发现插件, 需要直接调用 binary
 kubectl-debug POD_NAME
@@ -120,11 +123,11 @@ make plugin
 make agent-docker
 ```
 
-# port-forward 模式和 agentless 模式
+# port-forward 模式和 agentless 模式(默认开启)
 
 - `port-foward`模式：默认情况下，`kubectl-debug`会直接与目标宿主机建立连接。当`kubectl-debug`无法与目标宿主机直连时，可以开启`port-forward`模式。`port-forward`模式下，本机会监听localhost:agentPort，并将数据转发至目标Pod的agentPort端口。
 
-- `agentless`模式： 默认情况下，`debug-agent`需要预先部署在集群每个节点上，会一直消耗集群资源，然而调试 Pod 是低频操作。为避免集群资源损失，在[#31](https://github.com/aylei/kubectl-debug/pull/31)增加了`agentless`模式。`agentless`模式下，`kubectl-debug`会先在目标Pod所在宿主机上启动`debug-agent`，然后再启动调试容器。用户调试结束后，`kubectl-debug`会依次删除调试容器和在目的主机启动的`degbug-agent`。
+- `agentless`模式： 默认情况下，`debug-agent`需要预先部署在集群每个节点上，会一直消耗集群资源，然而调试 Pod 是低频操作。为避免集群资源损失，在[#31](https://github.com/aylei/kubectl-debug/pull/31)增加了`agentless`模式。`agentless`模式下，`kubectl-debug`会先在目标Pod所在宿主机上启动`debug-agent`，然后再启动调试容器。用户调试结束后，`kubectl-debug`会依次删除调试容器和在目的主机启动的`debug-agent`。
 
 
 # 配置
@@ -137,7 +140,7 @@ make agent-docker
 agentPort: 10027
 
 # 是否开启ageless模式
-# 默认 false
+# 默认 true
 agentless: true
 # agentPod 的 namespace, agentless模式可用
 # 默认 default
@@ -156,7 +159,7 @@ debugAgentDaemonset: debug-agent
 # 默认 'default'
 debugAgentNamespace: kube-system
 # 是否开启 port-forward 模式
-# 默认 false
+# 默认 true
 portForward: true
 # image of the debug container
 # default as showed
