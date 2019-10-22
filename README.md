@@ -87,6 +87,11 @@ kubectl debug POD_NAME
 # you can fork a new pod and diagnose the problem in the forked pod
 kubectl debug POD_NAME --fork
 
+# in fork mode, if you want the copied pod retains the labels of the original pod, you can use the --fork-pod-retain-labels parameter to set(comma separated, and spaces are not allowed)
+# Example is as follows
+# If not set, this parameter is empty by default (Means that any labels of the original pod are not retained, and the labels of the copied pods are empty.)
+kubectl debug POD_NAME --fork --fork-pod-retain-labels=<labelKeyA>,<labelKeyB>,<labelKeyC>
+
 # in order to enable node without public IP or direct access (firewall and other reasons) to access, port-forward mode is enabled by default.
 # if you don't need to turn on port-forward mode, you can use --port-forward false to turn off it.
 kubectl debug POD_NAME --port-forward=false --agentless=false --daemonset-ns=kube-system --daemonset-name=debug-agent
@@ -98,9 +103,9 @@ kubectl-debug POD_NAME
 # the default registry-secret-name is kubectl-debug-registry-secret, the default namespace is default
 # please set the secret data source as {Username: <username>, Password: <password>}
 kubectl-debug POD_NAME --image calmkart/netshoot:latest --registry-secret-name <k8s_secret_name> --registry-secret-namespace <namespace>
-# in agentless mode, you can set the agent pod's resource limits/requests, for example:
+# in default agentless mode, you can set the agent pod's resource limits/requests, for example:
 # default is not set
-kubectl-debug POD_NAME --agentless --agent-pod-cpu-requests=250m --agent-pod-cpu-limits=500m --agent-pod-memory-requests=200Mi --agent-pod-memory-limits=500Mi
+kubectl-debug POD_NAME --agent-pod-cpu-requests=250m --agent-pod-cpu-limits=500m --agent-pod-memory-requests=200Mi --agent-pod-memory-limits=500Mi
 ```
 
 Example:
@@ -189,6 +194,10 @@ agentCpuRequests: ""
 agentCpuLimits: ""
 agentMemoryRequests: ""
 agentMemoryLimits: ""
+# in fork mode, if you want the copied pod retains the labels of the original pod, you can change this params
+# format is []string
+# If not set, this parameter is empty by default (Means that any labels of the original pod are not retained, and the labels of the copied pods are empty.)
+forkPodRetainLabels: []
 ```
 
 If the debug-agent is not accessible from host port, it is recommended to set `portForward: true` to using port-forawrd mode.

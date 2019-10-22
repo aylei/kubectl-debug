@@ -81,6 +81,11 @@ kubectl debug POD_NAME
 # 假如 Pod 处于 CrashLookBackoff 状态无法连接, 可以复制一个完全相同的 Pod 来进行诊断
 kubectl debug POD_NAME --fork
 
+# 当使用fork mode时,如果需要复制出来的pod保留原pod的labels,可以使用 --fork-pod-retain-labels 参数进行设置(注意逗号分隔,且不允许空格)
+# 示例如下
+# 若不设置,该参数默认为空(既不保留原pod的任何labels,fork出来的新pod的labels为空)
+kubectl debug POD_NAME --fork --fork-pod-retain-labels=<labelKeyA>,<labelKeyB>,<labelKeyC>
+
 # 为了使 没有公网 IP 或无法直接访问(防火墙等原因)的 NODE 能够访问, 默认开启 port-forward 模式
 # 如果不需要开启port-forward模式, 可以使用 --port-forward=false 来关闭
 kubectl debug POD_NAME --port-forward=false --agentless=false --daemonset-ns=kube-system --daemonset-name=debug-agent
@@ -93,9 +98,9 @@ kubectl-debug POD_NAME
 # 默认secret_name为kubectl-debug-registry-secret,默认namspace为default
 kubectl-debug POD_NAME --image calmkart/netshoot:latest --registry-secret-name <k8s_secret_name> --registry-secret-namespace <namespace>
 
-# 在agentless模式中,你可以设置agent pod的resource资源限制,如下示例
+# 在默认的agentless模式中,你可以设置agent pod的resource资源限制,如下示例
 # 若不设置,默认为空
-kubectl-debug POD_NAME --agentless --agent-pod-cpu-requests=250m --agent-pod-cpu-limits=500m --agent-pod-memory-requests=200Mi --agent-pod-memory-limits=500Mi
+kubectl-debug POD_NAME --agent-pod-cpu-requests=250m --agent-pod-cpu-limits=500m --agent-pod-memory-requests=200Mi --agent-pod-memory-limits=500Mi
 ```
 
 举例:
@@ -175,12 +180,16 @@ command:
 # 默认RegistrySecretName为kubectl-debug-registry-secret,默认RegistrySecretNamespace为default
 RegistrySecretName: my-debug-secret
 RegistrySecretNamespace: debug
-# 在agentless模式下可以设置agent pod的resource资源限制
+# 在默认的agentless模式下可以设置agent pod的resource资源限制
 # 若不设置,默认为空
 agentCpuRequests: ""
 agentCpuLimits: ""
 agentMemoryRequests: ""
 agentMemoryLimits: ""
+# 当使用fork mode时,如果需要复制出来的pod保留原pod的labels,可以设置需要保留的labels列表
+# 格式为[]string
+# 默认为空(既不保留任何原POD的labels,新fork出pod的labels)
+forkPodRetainLabels: []
 ```
 
 > `kubectl-debug` 会将容器的 entrypoint 直接覆盖掉, 这是为了避免在 debug 时不小心启动非 shell 进程.

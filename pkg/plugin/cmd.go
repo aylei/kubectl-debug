@@ -98,13 +98,14 @@ type DebugOptions struct {
 	Image                   string
 	RegistrySecretName      string
 	RegistrySecretNamespace string
-	ContainerName           string
-	Command                 []string
-	AgentPort               int
-	AppName                 string
-	ConfigLocation          string
-	Fork                    bool
 
+	ContainerName       string
+	Command             []string
+	AgentPort           int
+	AppName             string
+	ConfigLocation      string
+	Fork                bool
+	ForkPodRetainLabels []string
 	//used for agentless mode
 	AgentLess  bool
 	AgentImage string
@@ -180,6 +181,8 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		"private registry secret name, default is kubectl-debug-registry-secret")
 	cmd.Flags().StringVar(&opts.RegistrySecretNamespace, "registry-secret-namespace", "",
 		"private registry secret namespace, default is default")
+	cmd.Flags().StringSliceVar(&opts.ForkPodRetainLabels, "fork-pod-retain-labels", []string{},
+		"in fork mode the pod labels retain labels name list, default is not set")
 	cmd.Flags().StringVarP(&opts.ContainerName, "container", "c", "",
 		"Target container to debug, default to the first container in pod")
 	cmd.Flags().IntVarP(&opts.AgentPort, "port", "p", 0,
@@ -284,6 +287,11 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 			o.RegistrySecretNamespace = config.RegistrySecretNamespace
 		} else {
 			o.RegistrySecretNamespace = defaultRegistrySecretNamespace
+		}
+	}
+	if len(o.ForkPodRetainLabels) < 1 {
+		if len(config.ForkPodRetainLabels) > 0 {
+			o.ForkPodRetainLabels = config.ForkPodRetainLabels
 		}
 	}
 	if o.AgentPort < 1 {
@@ -435,7 +443,10 @@ func (o *DebugOptions) Run() error {
 	// and hack the entry point of the target container with sleep command
 	// which keeps the container running.
 	if o.Fork {
-		pod = copyAndStripPod(pod, containerName)
+		// build the fork pod labels
+		podLabels := o.buildForkPodLabels(pod)
+		// copy pod and run
+		pod = copyAndStripPod(pod, containerName, podLabels)
 		pod, err = o.launchPod(pod)
 		if err != nil {
 			fmt.Fprintf(o.Out, "the ForkedPod is not running, you should check the reason and delete the failed ForkedPod and retry\n")
@@ -648,15 +659,27 @@ func (o *DebugOptions) setupTTY() term.TTY {
 	return t
 }
 
+func (o *DebugOptions) buildForkPodLabels(pod *corev1.Pod) map[string]string {
+	podLabels := map[string]string{}
+	for _, label := range o.ForkPodRetainLabels {
+		for k, v := range pod.ObjectMeta.Labels {
+			if label == k {
+				podLabels[k] = v
+			}
+		}
+	}
+	return podLabels
+}
+
 // copyAndStripPod copy the given pod template, strip the probes and labels,
 // and replace the entry point
-func copyAndStripPod(pod *corev1.Pod, targetContainer string) *corev1.Pod {
+func copyAndStripPod(pod *corev1.Pod, targetContainer string, podLabels map[string]string) *corev1.Pod {
 	copied := &corev1.Pod{
 		ObjectMeta: *pod.ObjectMeta.DeepCopy(),
 		Spec:       *pod.Spec.DeepCopy(),
 	}
 	copied.Name = fmt.Sprintf("%s-%s-debug", pod.Name, uuid.NewUUID())
-	copied.Labels = nil
+	copied.Labels = podLabels
 	copied.Spec.RestartPolicy = corev1.RestartPolicyNever
 	for i, c := range copied.Spec.Containers {
 		copied.Spec.Containers[i].LivenessProbe = nil

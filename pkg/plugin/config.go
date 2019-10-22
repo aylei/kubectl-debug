@@ -15,6 +15,7 @@ type Config struct {
 	Image                   string   `yaml:"image,omitempty"`
 	RegistrySecretName      string   `yaml:"registrySecretName,omitempty"`
 	RegistrySecretNamespace string   `yaml:"registrySecretNamespace,omitempty"`
+	ForkPodRetainLabels     []string `yaml:"forkPodRetainLabels,omitempty"`
 	DebugAgentDaemonSet     string   `yaml:"debugAgentDaemonset,omitempty"`
 	DebugAgentNamespace     string   `yaml:"debugAgentNamespace,omitempty"`
 	Command                 []string `yaml:"command,omitempty"`
