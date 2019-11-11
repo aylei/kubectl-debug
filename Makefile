@@ -9,10 +9,10 @@ default: build
 build: plugin agent-docker
 
 plugin:
-	GO111MODULE=on CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o kubectl-debug cmd/plugin/main.go
+	GO111MODULE=on CGO_ENABLED=0 $(GOENV) go build -ldflags '$(LDFLAGS)' -o kubectl-debug cmd/plugin/main.go
 
 agent-docker: agent
-	docker build . -t aylei/debug-agent:latest
+	docker build . -t registry.cn-hangzhou.aliyuncs.com/huya_zhangyi/debug-agent:latest
 
 agent:
 	$(GO) build -ldflags '$(LDFLAGS)' -o debug-agent cmd/agent/main.go
