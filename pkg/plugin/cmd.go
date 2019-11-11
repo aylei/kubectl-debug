@@ -218,7 +218,7 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	cmd.Flags().StringVar(&opts.AgentPodResource.MemoryLimits, "agent-pod-memory-limits", "",
 		fmt.Sprintf("Agentless mode, agent pod memory limits, default is not set"))
 	cmd.Flags().BoolVarP(&opts.IsLxcfsEnabled, "enablelxcfs", "", true,
-		fmt.Sprintf("Enable Lxcfs, the target container can use its proc files, default to %s", defaultLxcfsEnable))
+		fmt.Sprintf("Enable Lxcfs, the target container can use its proc files, default to %t", defaultLxcfsEnable))
 	opts.Flags.AddFlags(cmd.Flags())
 
 	return cmd
