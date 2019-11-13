@@ -1,8 +1,8 @@
 #!/bin/sh
 
 # Cleanup
-/usr/bin/nsenter -m/proc/1/ns/mnt fusermount -u /var/lib/lxc/lxcfs 2> /dev/null || true
-/usr/bin/nsenter -m/proc/1/ns/mnt [ -L /etc/mtab ] || \
+/usr/bin/nsenter -m/proc/1/ns/mnt -- fusermount -u /var/lib/lxc/lxcfs 2> /dev/null || true
+/usr/bin/nsenter -m/proc/1/ns/mnt -- [ -L /etc/mtab ] || \
         sed -i "/^lxcfs \/var\/lib\/lxc\/lxcfs fuse.lxcfs/d" /etc/mtab
 
 # Prepare

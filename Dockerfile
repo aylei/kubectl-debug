@@ -1,11 +1,11 @@
-FROM debian:stretch as build
+FROM ubuntu:xenial as build
 
-RUN apt-get update && apt-get install libcgmanager-dev libnih-dbus-dev libnih-dev libfuse-dev automake libtool libpam-dev wget build-essential -y && apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install libcgmanager-dev libnih-dbus-dev libnih-dev libfuse-dev automake libtool libpam-dev wget gcc automake -y && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 ENV LXCFS_VERSION 3.1.2
 RUN wget https://linuxcontainers.org/downloads/lxcfs/lxcfs-$LXCFS_VERSION.tar.gz && \
 	mkdir /lxcfs && tar xzvf lxcfs-$LXCFS_VERSION.tar.gz -C /lxcfs  --strip-components=1 && \
-	cd /lxcfs && ./configure --disable-dependency-tracking && make
+	cd /lxcfs && ./configure && make
 
 FROM alpine:3.10
 
