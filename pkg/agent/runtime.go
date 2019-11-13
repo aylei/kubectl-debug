@@ -159,7 +159,7 @@ func (m *DebugAttacher) SetContainerLxcfs(container string) error {
 					Target: 	containerInstance.State.Pid,
 					MountLxcfs: true,
 				}
-				stdout, stderr, err := nsenter.Execute("mount", "-B", LxcfsHomeDir+procfile, procfile)
+				stdout, stderr, err := nsenter.Execute("--","mount", "-B", LxcfsHomeDir+procfile, procfile)
 				if err != nil {
 					log.Printf(stderr)
 				}

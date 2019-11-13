@@ -1,8 +1,8 @@
-#!/bin/bash
+#!/bin/sh
 
 # Cleanup
-nsenter -m/proc/1/ns/mnt fusermount -u /var/lib/lxc/lxcfs 2> /dev/null || true
-nsenter -m/proc/1/ns/mnt [ -L /etc/mtab ] || \
+/usr/bin/nsenter -m/proc/1/ns/mnt fusermount -u /var/lib/lxc/lxcfs 2> /dev/null || true
+/usr/bin/nsenter -m/proc/1/ns/mnt [ -L /etc/mtab ] || \
         sed -i "/^lxcfs \/var\/lib\/lxc\/lxcfs fuse.lxcfs/d" /etc/mtab
 
 # Prepare
@@ -14,6 +14,6 @@ cp -f /lxcfs/liblxcfs.so /usr/local/lib/lxcfs/liblxcfs.so
 
 
 # Mount
-exec nsenter -m/proc/1/ns/mnt /usr/local/bin/lxcfs /var/lib/lxc/lxcfs/ &
+exec /usr/bin/nsenter -m/proc/1/ns/mnt /usr/local/bin/lxcfs /var/lib/lxc/lxcfs/ &
 
 /bin/debug-agent

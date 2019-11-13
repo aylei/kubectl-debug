@@ -46,8 +46,6 @@ spec:
               mountPropagation: Bidirectional
             - name: docker
               mountPath: "/var/run/docker.sock"
-            - name: usr-local
-              mountPath: /usr/local
       # hostNetwork: true
       volumes:
         - name: cgroup
@@ -60,9 +58,6 @@ spec:
         - name: docker
           hostPath:
             path: /var/run/docker.sock
-        - name: usr-local
-          hostPath:
-            path: /usr/local
   updateStrategy:
     rollingUpdate:
       maxUnavailable: 5
