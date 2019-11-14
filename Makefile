@@ -12,7 +12,7 @@ plugin:
 	GO111MODULE=on CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o kubectl-debug cmd/plugin/main.go
 
 agent-docker: agent
-	docker build . -t aylei/debug-agent:latest
+	docker build . -t aylei/debug-agent:0.0.2
 
 agent:
 	$(GO) build -ldflags '$(LDFLAGS)' -o debug-agent cmd/agent/main.go

@@ -97,6 +97,12 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 		Stderr: false,
 		TTY:    true,
 	}
+	lxcfsEnabled := req.FormValue("lxcfsEnabled")
+	if lxcfsEnabled == "" || lxcfsEnabled == "false" {
+		LxcfsEnabled = false
+	} else if lxcfsEnabled == "true" {
+		LxcfsEnabled = true
+	}
 
 	context, cancel := context.WithCancel(req.Context())
 	defer cancel()
@@ -105,7 +111,7 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 	kubeletremote.ServeAttach(
 		w,
 		req,
-		s.runtimeApi.GetAttacher(image, authStr, commandSlice, context, cancel),
+		s.runtimeApi.GetAttacher(image, authStr, LxcfsEnabled, commandSlice, context, cancel),
 		"",
 		"",
 		dockerContainerId,

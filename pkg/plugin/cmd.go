@@ -85,6 +85,7 @@ You may set default configuration such as image and command in the config file, 
 
 	defaultPortForward = true
 	defaultAgentless   = true
+	defaultLxcfsEnable = true
 )
 
 // DebugOptions specify how to run debug container in a running pod
@@ -114,6 +115,8 @@ type DebugOptions struct {
 	AgentPodNamespace string
 	AgentPodNode      string
 	AgentPodResource  agentPodResources
+	// enable lxcfs
+	IsLxcfsEnabled bool
 
 	Flags      *genericclioptions.ConfigFlags
 	CoreClient coreclient.CoreV1Interface
@@ -214,6 +217,8 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		fmt.Sprintf("Agentless mode, agent pod cpu limits, default is not set"))
 	cmd.Flags().StringVar(&opts.AgentPodResource.MemoryLimits, "agent-pod-memory-limits", "",
 		fmt.Sprintf("Agentless mode, agent pod memory limits, default is not set"))
+	cmd.Flags().BoolVarP(&opts.IsLxcfsEnabled, "enable-lxcfs", "", true,
+		fmt.Sprintf("Enable Lxcfs, the target container can use its proc files, default to %t", defaultLxcfsEnable))
 	opts.Flags.AddFlags(cmd.Flags())
 
 	return cmd
@@ -370,6 +375,12 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		} else {
 			o.AgentPodResource.MemoryLimits = defaultAgentPodMemoryLimits
 		}
+	}
+
+	if o.IsLxcfsEnabled {
+		o.IsLxcfsEnabled = config.IsLxcfsEnabled
+	} else {
+		o.IsLxcfsEnabled = defaultLxcfsEnable
 	}
 
 	if config.PortForward {
@@ -534,6 +545,11 @@ func (o *DebugOptions) Run() error {
 		params := url.Values{}
 		params.Add("image", o.Image)
 		params.Add("container", containerID)
+		if o.IsLxcfsEnabled {
+			params.Add("lxcfsEnabled", "true")
+		} else {
+			params.Add("lxcfsEnabled", "false")
+		}
 		var authStr string
 		registrySecret, err := o.CoreClient.Secrets(o.RegistrySecretNamespace).Get(o.RegistrySecretName, v1.GetOptions{})
 		if err != nil {
@@ -725,6 +741,9 @@ func (o *DebugOptions) launchPod(pod *corev1.Pod) (*corev1.Pod, error) {
 
 // getAgentPod construnct agentPod from agent pod template
 func (o *DebugOptions) getAgentPod() *corev1.Pod {
+	prop := corev1.MountPropagationBidirectional
+	directoryCreate := corev1.HostPathDirectoryOrCreate
+	priveleged := true
 	agentPod := &corev1.Pod{
 		TypeMeta: v1.TypeMeta{
 			Kind:       "Pod",
@@ -735,6 +754,7 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 			Namespace: o.AgentPodNamespace,
 		},
 		Spec: corev1.PodSpec{
+			HostPID:  true,
 			NodeName: o.AgentPodNode,
 			Containers: []corev1.Container{
 				{
@@ -754,11 +774,23 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 						TimeoutSeconds:      1,
 						FailureThreshold:    3,
 					},
+					SecurityContext: &corev1.SecurityContext{
+						Privileged: &priveleged,
+					},
 					Resources: o.buildAgentResourceRequirements(),
 					VolumeMounts: []corev1.VolumeMount{
 						{
 							Name:      "docker",
 							MountPath: "/var/run/docker.sock",
+						},
+						{
+							Name:      "cgroup",
+							MountPath: "/sys/fs/cgroup",
+						},
+						{
+							Name:             "lxcfs",
+							MountPath:        "/var/lib/lxc/lxcfs",
+							MountPropagation: &prop,
 						},
 					},
 					Ports: []corev1.ContainerPort{
@@ -776,6 +808,23 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 					VolumeSource: corev1.VolumeSource{
 						HostPath: &corev1.HostPathVolumeSource{
 							Path: "/var/run/docker.sock",
+						},
+					},
+				},
+				{
+					Name: "cgroup",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: "/sys/fs/cgroup",
+						},
+					},
+				},
+				{
+					Name: "lxcfs",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: "/var/lib/lxc/lxcfs",
+							Type: &directoryCreate,
 						},
 					},
 				},

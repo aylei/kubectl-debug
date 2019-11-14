@@ -13,33 +13,51 @@ spec:
       labels:
         app: debug-agent
     spec:
+      hostPID: true
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
       containers:
-      - image: aylei/debug-agent:0.0.1
-        imagePullPolicy: Always
-        livenessProbe:
-          failureThreshold: 3
-          httpGet:
-            path: /healthz
-            port: 10027
-            scheme: HTTP
-          initialDelaySeconds: 10
-          periodSeconds: 10
-          successThreshold: 1
-          timeoutSeconds: 1
-        name: debug-agent
-        ports:
-        - containerPort: 10027
-          hostPort: 10027
-          name: http
-          protocol: TCP
-        volumeMounts:
-        - name: docker
-          mountPath: "/var/run/docker.sock"
+        - name: debug-agent
+          image: aylei/debug-agent:0.0.2
+          imagePullPolicy: Always
+          securityContext:
+            privileged: true
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 10027
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          ports:
+            - containerPort: 10027
+              hostPort: 10027
+              name: http
+              protocol: TCP
+          volumeMounts:
+            - name: cgroup
+              mountPath: /sys/fs/cgroup
+            - name: lxcfs
+              mountPath: /var/lib/lxc/lxcfs
+              mountPropagation: Bidirectional
+            - name: docker
+              mountPath: "/var/run/docker.sock"
       # hostNetwork: true
       volumes:
-      - name: docker
-        hostPath:
-          path: /var/run/docker.sock
+        - name: cgroup
+          hostPath:
+            path: /sys/fs/cgroup
+        - name: lxcfs
+          hostPath:
+            path: /var/lib/lxc/lxcfs
+            type: DirectoryOrCreate
+        - name: docker
+          hostPath:
+            path: /var/run/docker.sock
   updateStrategy:
     rollingUpdate:
       maxUnavailable: 5

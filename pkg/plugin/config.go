@@ -28,7 +28,7 @@ type Config struct {
 	AgentPodMemoryRequests  string   `yaml:"agentMemoryRequests,omitempty"`
 	AgentPodCpuLimits       string   `yaml:"agentCpuLimits,omitempty"`
 	AgentPodMemoryLimits    string   `yaml:"agentMemoryLimits,omitempty"`
-
+	IsLxcfsEnabled          bool     `yaml:"isLxcfsEnabled,omitempty"`
 	// deprecated
 	AgentPortOld int `yaml:"agent_port,omitempty"`
 }
