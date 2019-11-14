@@ -42,12 +42,12 @@ func NewRuntimeManager(host string, timeout time.Duration) (*RuntimeManager, err
 // DebugAttacher implements Attacher
 // we use this struct in order to inject debug info (image, command) in the debug procedure
 type DebugAttacher struct {
-	runtime 	 *RuntimeManager
-	image   	 string
-	authStr 	 string
-	lxcfsEnabled string
-	command 	 []string
-	client  	 *dockerclient.Client
+	runtime      *RuntimeManager
+	image        string
+	authStr      string
+	lxcfsEnabled bool
+	command      []string
+	client       *dockerclient.Client
 
 	// control the preparing of debug container
 	stopListenEOF chan struct{}
@@ -60,7 +60,7 @@ func (a *DebugAttacher) AttachContainer(name string, uid kubetype.UID, container
 }
 
 // GetAttacher returns an implementation of Attacher
-func (m *RuntimeManager) GetAttacher(image, authStr, lxcfsEnabled string, command []string, context context.Context, cancel context.CancelFunc) kubeletremote.Attacher {
+func (m *RuntimeManager) GetAttacher(image, authStr string, lxcfsEnabled bool, command []string, context context.Context, cancel context.CancelFunc) kubeletremote.Attacher {
 	return &DebugAttacher{
 		runtime:       m,
 		image:         image,
@@ -105,8 +105,8 @@ func (m *DebugAttacher) DebugContainer(container, image string, authStr string, 
 	//	}
 	//} ()
 	// step 0: set container procfs correct by lxcfs
-	stdout.Write([]byte(fmt.Sprintf("set container procfs correct %s .. \n\r", m.lxcfsEnabled)))
-	if m.lxcfsEnabled == "true" {
+	stdout.Write([]byte(fmt.Sprintf("set container procfs correct %t .. \n\r", m.lxcfsEnabled)))
+	if m.lxcfsEnabled {
 		if err := CheckLxcfsMount(); err != nil {
 			return err
 		}
@@ -143,7 +143,6 @@ func (m *DebugAttacher) DebugContainer(container, image string, authStr string, 
 	return nil
 }
 
-
 func (m *DebugAttacher) SetContainerLxcfs(container string) error {
 	ctx, cancel := m.getContextWithTimeout()
 	defer cancel()
@@ -156,21 +155,20 @@ func (m *DebugAttacher) SetContainerLxcfs(container string) error {
 			log.Printf("remount lxcfs when the rootdir of lxcfs of target container has been mounted. \n\t ")
 			for _, procfile := range LxcfsProcFiles {
 				nsenter := &nsenter.MountNSEnter{
-					Target: 	containerInstance.State.Pid,
+					Target:     containerInstance.State.Pid,
 					MountLxcfs: true,
 				}
-				stdout, stderr, err := nsenter.Execute("--","mount", "-B", LxcfsHomeDir+procfile, procfile)
+				_, stderr, err := nsenter.Execute("--", "mount", "-B", LxcfsHomeDir+procfile, procfile)
 				if err != nil {
-					log.Printf(stderr)
+					log.Printf("bind mount lxcfs files failed. \n\t reason: %s", stderr)
+					return err
 				}
-				log.Printf(stdout)
 			}
 		}
 	}
 
 	return nil
 }
-
 
 // Run a new container, this container will join the network,
 // mount, and pid namespace of the given container

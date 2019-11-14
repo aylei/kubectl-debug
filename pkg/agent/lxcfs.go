@@ -10,20 +10,18 @@ import (
 
 // List of LXC filesystem files
 const (
-	MemFile		  string = "/proc/meminfo"
-	CpuFile 	  string = "/proc/cpuinfo"
-	UpTimeFile 	  string = "/proc/uptime"
-	SwapsFile 	  string = "/proc/swaps"
-	StatFile	  string = "/proc/stat"
+	MemFile       string = "/proc/meminfo"
+	CpuFile       string = "/proc/cpuinfo"
+	UpTimeFile    string = "/proc/uptime"
+	SwapsFile     string = "/proc/swaps"
+	StatFile      string = "/proc/stat"
 	DiskStatsFile string = "/proc/diskstats"
 	LoadavgFile   string = "/proc/loadavg"
-
-	CpuOnline     string = "/sys/devices/system/cpu/online"
 )
 
 var (
 	// IsLxcfsEnabled means whether to enable lxcfs
-	LxcfsEnabled string
+	LxcfsEnabled bool
 
 	// LxcfsRootDir
 	LxcfsRootDir = "/var/lib/lxc"
@@ -62,4 +60,3 @@ func CheckLxcfsMount() error {
 	}
 	return nil
 }
-

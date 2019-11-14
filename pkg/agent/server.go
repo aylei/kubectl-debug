@@ -97,10 +97,11 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 		Stderr: false,
 		TTY:    true,
 	}
-	LxcfsEnabled = req.FormValue("lxcfsEnabled")
-	if len(LxcfsEnabled) < 1 {
-		http.Error(w, "LxcfsEnabled must be provided", 400)
-		return
+	lxcfsEnabled := req.FormValue("lxcfsEnabled")
+	if lxcfsEnabled == "" || lxcfsEnabled == "false" {
+		LxcfsEnabled = false
+	} else if lxcfsEnabled == "true" {
+		LxcfsEnabled = true
 	}
 
 	context, cancel := context.WithCancel(req.Context())

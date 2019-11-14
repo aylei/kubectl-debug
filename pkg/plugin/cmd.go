@@ -116,7 +116,7 @@ type DebugOptions struct {
 	AgentPodNode      string
 	AgentPodResource  agentPodResources
 	// enable lxcfs
-	IsLxcfsEnabled    bool
+	IsLxcfsEnabled bool
 
 	Flags      *genericclioptions.ConfigFlags
 	CoreClient coreclient.CoreV1Interface
@@ -217,7 +217,7 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		fmt.Sprintf("Agentless mode, agent pod cpu limits, default is not set"))
 	cmd.Flags().StringVar(&opts.AgentPodResource.MemoryLimits, "agent-pod-memory-limits", "",
 		fmt.Sprintf("Agentless mode, agent pod memory limits, default is not set"))
-	cmd.Flags().BoolVarP(&opts.IsLxcfsEnabled, "enablelxcfs", "", true,
+	cmd.Flags().BoolVarP(&opts.IsLxcfsEnabled, "enable-lxcfs", "", true,
 		fmt.Sprintf("Enable Lxcfs, the target container can use its proc files, default to %t", defaultLxcfsEnable))
 	opts.Flags.AddFlags(cmd.Flags())
 
@@ -742,7 +742,7 @@ func (o *DebugOptions) launchPod(pod *corev1.Pod) (*corev1.Pod, error) {
 // getAgentPod construnct agentPod from agent pod template
 func (o *DebugOptions) getAgentPod() *corev1.Pod {
 	prop := corev1.MountPropagationBidirectional
-	filorCreate := corev1.HostPathDirectoryOrCreate
+	directoryCreate := corev1.HostPathDirectoryOrCreate
 	priveleged := true
 	agentPod := &corev1.Pod{
 		TypeMeta: v1.TypeMeta{
@@ -784,12 +784,12 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 							MountPath: "/var/run/docker.sock",
 						},
 						{
-							Name:		"cgroup",
-							MountPath:  "/sys/fs/cgroup",
+							Name:      "cgroup",
+							MountPath: "/sys/fs/cgroup",
 						},
 						{
-							Name:		"lxcfs",
-							MountPath:	"/var/lib/lxc/lxcfs",
+							Name:             "lxcfs",
+							MountPath:        "/var/lib/lxc/lxcfs",
 							MountPropagation: &prop,
 						},
 					},
@@ -824,7 +824,7 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 					VolumeSource: corev1.VolumeSource{
 						HostPath: &corev1.HostPathVolumeSource{
 							Path: "/var/lib/lxc/lxcfs",
-							Type: &filorCreate,
+							Type: &directoryCreate,
 						},
 					},
 				},

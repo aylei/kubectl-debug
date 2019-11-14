@@ -10,10 +10,9 @@ import (
 
 // MountNSEnter is the client used to enter the mount namespace
 type MountNSEnter struct {
-
-	Target 	  		int 	// target PID (required)
-	MountLxcfs    	bool    // enter mount namespace or not
-	MountFile		string  // Mount namespace location, default to /proc/PID/ns/mnt
+	Target     int    // target PID (required)
+	MountLxcfs bool   // enter mount namespace or not
+	MountFile  string // Mount namespace location, default to /proc/PID/ns/mnt
 }
 
 // Execute runs the given command with a default background context
@@ -21,9 +20,8 @@ func (cli *MountNSEnter) Execute(command string, args ...string) (stdout, stderr
 	return cli.ExecuteContext(context.Background(), command, args...)
 }
 
-
 // ExecuteContext the given command using the specific nsenter config
-func (cli *MountNSEnter) ExecuteContext(ctx context.Context, command string, args ...string) (string, string, error){
+func (cli *MountNSEnter) ExecuteContext(ctx context.Context, command string, args ...string) (string, string, error) {
 	cmd, err := cli.setCommand(ctx)
 	if err != nil {
 		return "", "", fmt.Errorf("Error when set command: %v", err)
@@ -43,7 +41,7 @@ func (cli *MountNSEnter) ExecuteContext(ctx context.Context, command string, arg
 	return stdout.String(), stderr.String(), nil
 }
 
-func (cli *MountNSEnter) setCommand(ctx context.Context) (*exec.Cmd, error){
+func (cli *MountNSEnter) setCommand(ctx context.Context) (*exec.Cmd, error) {
 	if cli.Target == 0 {
 		return nil, fmt.Errorf("Target must be specified")
 	}
@@ -61,5 +59,3 @@ func (cli *MountNSEnter) setCommand(ctx context.Context) (*exec.Cmd, error){
 	cmd := exec.CommandContext(ctx, "/usr/bin/nsenter", args...)
 	return cmd, nil
 }
-
-
