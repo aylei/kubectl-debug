@@ -19,7 +19,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: debug-agent
-          image: aylei/debug-agent:0.0.2
+          image: aylei/debug-agent:latest
           imagePullPolicy: Always
           securityContext:
             privileged: true
