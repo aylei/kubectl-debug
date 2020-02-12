@@ -54,7 +54,7 @@ spec:
       - name: docker
         hostPath:
           path: /var/run/docker.sock
-    {{- if .ValuesnodeSelector }}
+    {{- if .Values.nodeSelector }}
       nodeSelector:
 {{ toYaml .Values.nodeSelector | indent 8 }}
     {{- end }}
