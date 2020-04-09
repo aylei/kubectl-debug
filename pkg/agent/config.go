@@ -1,9 +1,10 @@
 package agent
 
 import (
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"time"
+
+	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -24,6 +25,7 @@ type Config struct {
 	StreamCreationTimeout time.Duration `yaml:"stream_creation_timeout,omitempty"`
 
 	ListenAddress string `yaml:"listen_address,omitempty"`
+	Verbosity     int    `yaml:"verbosity,omitempty"`
 }
 
 func Load(s string) (*Config, error) {

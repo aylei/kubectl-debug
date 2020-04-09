@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var configFile string
 	flag.StringVar(&configFile, "config.file", "", "Config file location.")
 	flag.Parse()

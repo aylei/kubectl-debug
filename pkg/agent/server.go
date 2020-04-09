@@ -24,7 +24,8 @@ type Server struct {
 }
 
 func NewServer(config *Config) (*Server, error) {
-	runtime, err := NewRuntimeManager(config.DockerEndpoint, config.DockerTimeout)
+	// 2020-04-09 d : TODO Need to touch this in order to support containerd
+	runtime, err := NewRuntimeManager(config.DockerEndpoint, config.DockerTimeout, config.Verbosity)
 	if err != nil {
 		return nil, err
 	}
@@ -73,6 +74,7 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "target container id must be provided", 400)
 		return
 	}
+	// 2020-04-09 d : TODO Need to touch this in order to support containerd
 	if !strings.HasPrefix(containerId, dockerContainerPrefix) {
 		http.Error(w, "only docker container is suppored right now", 400)
 	}
@@ -108,6 +110,9 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 	defer cancel()
 
 	// replace Attacher implementation to hook the ServeAttach procedure
+	if s.config.Verbosity > 0 {
+		log.Println("Invoking kubeletremote.ServeAttach")
+	}
 	kubeletremote.ServeAttach(
 		w,
 		req,
@@ -119,6 +124,9 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 		s.config.StreamIdleTimeout,
 		s.config.StreamCreationTimeout,
 		remoteapi.SupportedStreamingProtocols)
+	if s.config.Verbosity > 0 {
+		log.Println("kubeletremote.ServeAttach returned")
+	}
 }
 
 func (s *Server) Healthz(w http.ResponseWriter, req *http.Request) {

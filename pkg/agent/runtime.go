@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/aylei/kubectl-debug/pkg/nsenter"
-	"github.com/aylei/kubectl-debug/pkg/util"
+	term "github.com/aylei/kubectl-debug/pkg/util"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/strslice"
@@ -24,18 +24,20 @@ import (
 
 // RuntimeManager is responsible for docker operation
 type RuntimeManager struct {
-	client  *dockerclient.Client
-	timeout time.Duration
+	client    *dockerclient.Client
+	timeout   time.Duration
+	verbosity int
 }
 
-func NewRuntimeManager(host string, timeout time.Duration) (*RuntimeManager, error) {
+func NewRuntimeManager(host string, timeout time.Duration, verbosity int) (*RuntimeManager, error) {
 	client, err := dockerclient.NewClient(host, "", nil, nil)
 	if err != nil {
 		return nil, err
 	}
 	return &RuntimeManager{
-		client:  client,
-		timeout: timeout,
+		client:    client,
+		timeout:   timeout,
+		verbosity: verbosity,
 	}, nil
 }
 
@@ -48,6 +50,7 @@ type DebugAttacher struct {
 	lxcfsEnabled bool
 	command      []string
 	client       *dockerclient.Client
+	verbosity    int
 
 	// control the preparing of debug container
 	stopListenEOF chan struct{}
@@ -56,6 +59,9 @@ type DebugAttacher struct {
 }
 
 func (a *DebugAttacher) AttachContainer(name string, uid kubetype.UID, container string, in io.Reader, out, err io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error {
+	if a.verbosity > 0 {
+		log.Println("Enter")
+	}
 	return a.DebugContainer(container, a.image, a.authStr, a.command, in, out, err, tty, resize)
 }
 
@@ -69,6 +75,7 @@ func (m *RuntimeManager) GetAttacher(image, authStr string, lxcfsEnabled bool, c
 		command:       command,
 		context:       context,
 		client:        m.client,
+		verbosity:     m.verbosity,
 		cancel:        cancel,
 		stopListenEOF: make(chan struct{}),
 	}
@@ -76,7 +83,9 @@ func (m *RuntimeManager) GetAttacher(image, authStr string, lxcfsEnabled bool, c
 
 // DebugContainer executes the main debug flow
 func (m *DebugAttacher) DebugContainer(container, image string, authStr string, command []string, stdin io.Reader, stdout, stderr io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error {
-
+	if m.verbosity > 0 {
+		log.Println("Enter")
+	}
 	log.Printf("Accept new debug reqeust:\n\t target container: %s \n\t image: %s \n\t command: %v \n", container, image, command)
 
 	// the following steps may takes much time,
