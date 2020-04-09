@@ -71,12 +71,15 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 	log.Println("receive debug request")
 	containerId := req.FormValue("container")
 	if len(containerId) < 1 {
+		log.Println("target container id must be provided")
 		http.Error(w, "target container id must be provided", 400)
 		return
 	}
 	// 2020-04-09 d : TODO Need to touch this in order to support containerd
 	if !strings.HasPrefix(containerId, dockerContainerPrefix) {
-		http.Error(w, "only docker container is suppored right now", 400)
+		log.Println("only docker container containre runtime is suppored right now")
+		http.Error(w, "only docker container runtime is suppored right now", 400)
+		return
 	}
 	dockerContainerId := containerId[len(dockerContainerPrefix):]
 
