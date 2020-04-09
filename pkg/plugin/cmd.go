@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -86,6 +87,7 @@ You may set default configuration such as image and command in the config file, 
 	defaultPortForward = true
 	defaultAgentless   = true
 	defaultLxcfsEnable = true
+	defaultVerbosity   = 0
 )
 
 // DebugOptions specify how to run debug container in a running pod
@@ -138,6 +140,9 @@ type DebugOptions struct {
 	genericclioptions.IOStreams
 
 	wait sync.WaitGroup
+
+	Verbosity int
+	Logger    *log.Logger
 }
 
 type agentPodResources struct {
@@ -155,6 +160,7 @@ func NewDebugOptions(streams genericclioptions.IOStreams) *DebugOptions {
 		PortForwarder: &defaultPortForwarder{
 			IOStreams: streams,
 		},
+		Logger: log.New(streams.Out, "kubectl-debug ", (log.LstdFlags | log.Lshortfile)),
 	}
 }
 
@@ -219,6 +225,8 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		fmt.Sprintf("Agentless mode, agent pod memory limits, default is not set"))
 	cmd.Flags().BoolVarP(&opts.IsLxcfsEnabled, "enable-lxcfs", "", true,
 		fmt.Sprintf("Enable Lxcfs, the target container can use its proc files, default to %t", defaultLxcfsEnable))
+	cmd.Flags().IntVarP(&opts.Verbosity, "verbosity ", "v", 0,
+		fmt.Sprintf("Set logging verbosity, default to %d", defaultVerbosity))
 	opts.Flags.AddFlags(cmd.Flags())
 
 	return cmd
@@ -614,6 +622,9 @@ func (o *DebugOptions) getContainerIDByName(pod *corev1.Pod, containerName strin
 		if containerStatus.State.Running == nil {
 			return "", fmt.Errorf("container [%s] not running", containerName)
 		}
+		if o.Verbosity > 0 {
+			o.Logger.Printf("Getting id from containerStatus %+v\r\n", containerStatus)
+		}
 		return containerStatus.ContainerID, nil
 	}
 
@@ -624,6 +635,9 @@ func (o *DebugOptions) getContainerIDByName(pod *corev1.Pod, containerName strin
 		}
 		if initContainerStatus.State.Running == nil {
 			return "", fmt.Errorf("init container [%s] is not running", containerName)
+		}
+		if o.Verbosity > 0 {
+			o.Logger.Printf("Getting id from initContainerStatus %+v\r\n", initContainerStatus)
 		}
 		return initContainerStatus.ContainerID, nil
 	}
@@ -640,9 +654,16 @@ func (o *DebugOptions) remoteExecute(
 	tty bool,
 	terminalSizeQueue remotecommand.TerminalSizeQueue) error {
 
+	if o.Verbosity > 0 {
+		o.Logger.Printf("Creating SPDY executor %+v %+v %+v\r\n", config, method, url)
+	}
 	exec, err := remotecommand.NewSPDYExecutor(config, method, url)
 	if err != nil {
+		o.Logger.Printf("Error creating SPDY executor.\r\n")
 		return err
+	}
+	if o.Verbosity > 0 {
+		o.Logger.Printf("Creating exec Stream\r\n")
 	}
 	return exec.Stream(remotecommand.StreamOptions{
 		Stdin:             stdin,
