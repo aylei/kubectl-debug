@@ -314,6 +314,15 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 			o.AgentPort = defaultAgentPort
 		}
 	}
+
+	if o.Verbosity < 1 {
+		if config.Verbosity > 0 {
+			o.Verbosity = config.Verbosity
+		} else {
+			o.Verbosity = defaultVerbosity
+		}
+	}
+
 	if len(o.DebugAgentNamespace) < 1 {
 		if len(config.DebugAgentNamespace) > 0 {
 			o.DebugAgentNamespace = config.DebugAgentNamespace
