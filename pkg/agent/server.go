@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -19,17 +20,11 @@ const (
 )
 
 type Server struct {
-	config     *Config
-	runtimeApi *RuntimeManager
+	config *Config
 }
 
 func NewServer(config *Config) (*Server, error) {
-	// 2020-04-09 d : TODO Need to touch this in order to support containerd
-	runtime, err := NewRuntimeManager(config.DockerEndpoint, config.DockerTimeout, config.Verbosity)
-	if err != nil {
-		return nil, err
-	}
-	return &Server{config: config, runtimeApi: runtime}, nil
+	return &Server{config: config}, nil
 }
 
 func (s *Server) Run() error {
@@ -75,6 +70,7 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "target container id must be provided", 400)
 		return
 	}
+
 	// 2020-04-09 d : TODO Need to touch this in order to support containerd
 	if !strings.HasPrefix(containerId, dockerContainerPrefix) {
 		log.Println("only docker container containre runtime is suppored right now")
@@ -112,14 +108,22 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 	context, cancel := context.WithCancel(req.Context())
 	defer cancel()
 
+	// 2020-04-09 d : TODO Need to touch this in order to support containerd
+	runtime, err := NewRuntimeManager(s.config.DockerEndpoint, s.config.DockerTimeout, s.config.Verbosity)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to construct RuntimeManager.  Error: ", err), 400)
+		return
+	}
+
 	// replace Attacher implementation to hook the ServeAttach procedure
 	if s.config.Verbosity > 0 {
 		log.Println("Invoking kubeletremote.ServeAttach")
 	}
+
 	kubeletremote.ServeAttach(
 		w,
 		req,
-		s.runtimeApi.GetAttacher(image, authStr, LxcfsEnabled, commandSlice, context, cancel),
+		runtime.GetAttacher(image, authStr, LxcfsEnabled, commandSlice, context, cancel),
 		"",
 		"",
 		dockerContainerId,
