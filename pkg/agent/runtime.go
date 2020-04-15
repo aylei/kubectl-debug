@@ -355,24 +355,8 @@ type RuntimeManager struct {
 	containerScheme ContainerRuntimeScheme
 }
 
-// GetAttacher returns an implementation of Attacher
-func (m *RuntimeManager) GetAttacher(image, authStr string, lxcfsEnabled bool, command []string, context context.Context, cancel context.CancelFunc) kubeletremote.Attacher {
-	return &DebugAttacherDocker{
-		runtime:       m,
-		image:         image,
-		authStr:       authStr,
-		lxcfsEnabled:  lxcfsEnabled,
-		command:       command,
-		context:       context,
-		client:        m.client,
-		verbosity:     m.verbosity,
-		cancel:        cancel,
-		stopListenEOF: make(chan struct{}),
-	}
-}
-
-func NewRuntimeManager(host string, containerUri string, timeout time.Duration, verbosity int) (*RuntimeManager, error) {
-	client, err := dockerclient.NewClient(host, "", nil, nil)
+func NewRuntimeManager(srvCfg Config, containerUri string, verbosity int) (*RuntimeManager, error) {
+	client, err := dockerclient.NewClient(srvCfg.DockerEndpoint, "", nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -397,9 +381,25 @@ func NewRuntimeManager(host string, containerUri string, timeout time.Duration, 
 
 	return &RuntimeManager{
 		client:          client,
-		timeout:         timeout,
+		timeout:         srvCfg.DockerTimeout,
 		verbosity:       verbosity,
 		containerId:     containerId,
 		containerScheme: containerScheme,
 	}, nil
+}
+
+// GetAttacher returns an implementation of Attacher
+func (m *RuntimeManager) GetAttacher(image, authStr string, lxcfsEnabled bool, command []string, context context.Context, cancel context.CancelFunc) kubeletremote.Attacher {
+	return &DebugAttacherDocker{
+		runtime:       m,
+		image:         image,
+		authStr:       authStr,
+		lxcfsEnabled:  lxcfsEnabled,
+		command:       command,
+		context:       context,
+		client:        m.client,
+		verbosity:     m.verbosity,
+		cancel:        cancel,
+		stopListenEOF: make(chan struct{}),
+	}
 }
