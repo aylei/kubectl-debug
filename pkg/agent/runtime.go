@@ -31,49 +31,7 @@ const (
 	ContainerdScheme ContainerRuntimeScheme = "containerd"
 )
 
-// RuntimeManager is responsible for docker operation
-type RuntimeManager struct {
-	client          *dockerclient.Client
-	timeout         time.Duration
-	verbosity       int
-	containerId     string
-	containerScheme ContainerRuntimeScheme
-}
-
-func NewRuntimeManager(host string, containerUri string, timeout time.Duration, verbosity int) (*RuntimeManager, error) {
-	client, err := dockerclient.NewClient(host, "", nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	if len(containerUri) < 1 {
-		return nil, errors.New("target container id must be provided")
-	}
-	containerUriParts := strings.SplitN(containerUri, "://", 2)
-	if len(containerUriParts) != 2 {
-		msg := fmt.Sprintf("target container id must have form scheme:id but was %v", containerUri)
-		log.Println(msg)
-		return nil, errors.New(msg)
-	}
-	containerScheme := ContainerRuntimeScheme(containerUriParts[0])
-	containerId := containerUriParts[1]
-
-	// 2020-04-09 d : TODO Need to touch this in order to support containerd
-	if containerScheme != DockerScheme {
-		msg := "only docker container container runtime is suppored right now"
-		log.Println(msg)
-		return nil, errors.New(msg)
-	}
-
-	return &RuntimeManager{
-		client:          client,
-		timeout:         timeout,
-		verbosity:       verbosity,
-		containerId:     containerId,
-		containerScheme: containerScheme,
-	}, nil
-}
-
-// DebugAttacher implements Attacher
+// DebugAttacherDocker implements Attacher
 // we use this struct in order to inject debug info (image, command) in the debug procedure
 type DebugAttacherDocker struct {
 	runtime      *RuntimeManager
@@ -97,22 +55,6 @@ func (a *DebugAttacherDocker) AttachContainer(name string, uid kubetype.UID, con
 		log.Println("Enter")
 	}
 	return a.DebugContainer(container, a.image, a.authStr, a.command, in, out, err, tty, resize)
-}
-
-// GetAttacher returns an implementation of Attacher
-func (m *RuntimeManager) GetAttacher(image, authStr string, lxcfsEnabled bool, command []string, context context.Context, cancel context.CancelFunc) kubeletremote.Attacher {
-	return &DebugAttacherDocker{
-		runtime:       m,
-		image:         image,
-		authStr:       authStr,
-		lxcfsEnabled:  lxcfsEnabled,
-		command:       command,
-		context:       context,
-		client:        m.client,
-		verbosity:     m.verbosity,
-		cancel:        cancel,
-		stopListenEOF: make(chan struct{}),
-	}
 }
 
 // DebugContainer executes the main debug flow
@@ -402,4 +344,62 @@ func (m *DebugAttacherDocker) getContextWithTimeout() (context.Context, context.
 
 func (m *DebugAttacherDocker) containerMode(id string) string {
 	return fmt.Sprintf("container:%s", id)
+}
+
+// RuntimeManager is responsible for docker operation
+type RuntimeManager struct {
+	client          *dockerclient.Client
+	timeout         time.Duration
+	verbosity       int
+	containerId     string
+	containerScheme ContainerRuntimeScheme
+}
+
+// GetAttacher returns an implementation of Attacher
+func (m *RuntimeManager) GetAttacher(image, authStr string, lxcfsEnabled bool, command []string, context context.Context, cancel context.CancelFunc) kubeletremote.Attacher {
+	return &DebugAttacherDocker{
+		runtime:       m,
+		image:         image,
+		authStr:       authStr,
+		lxcfsEnabled:  lxcfsEnabled,
+		command:       command,
+		context:       context,
+		client:        m.client,
+		verbosity:     m.verbosity,
+		cancel:        cancel,
+		stopListenEOF: make(chan struct{}),
+	}
+}
+
+func NewRuntimeManager(host string, containerUri string, timeout time.Duration, verbosity int) (*RuntimeManager, error) {
+	client, err := dockerclient.NewClient(host, "", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	if len(containerUri) < 1 {
+		return nil, errors.New("target container id must be provided")
+	}
+	containerUriParts := strings.SplitN(containerUri, "://", 2)
+	if len(containerUriParts) != 2 {
+		msg := fmt.Sprintf("target container id must have form scheme:id but was %v", containerUri)
+		log.Println(msg)
+		return nil, errors.New(msg)
+	}
+	containerScheme := ContainerRuntimeScheme(containerUriParts[0])
+	containerId := containerUriParts[1]
+
+	// 2020-04-09 d : TODO Need to touch this in order to support containerd
+	if containerScheme != DockerScheme {
+		msg := "only docker container container runtime is suppored right now"
+		log.Println(msg)
+		return nil, errors.New(msg)
+	}
+
+	return &RuntimeManager{
+		client:          client,
+		timeout:         timeout,
+		verbosity:       verbosity,
+		containerId:     containerId,
+		containerScheme: containerScheme,
+	}, nil
 }
