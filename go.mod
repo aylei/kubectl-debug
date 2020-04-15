@@ -13,11 +13,18 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578
 	github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973
+	github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible // 2020-04-15 d : https://github.com/containerd/containerd/issues/3031
 	github.com/census-instrumentation/opencensus-proto v0.2.1
+	github.com/containerd/containerd v1.3.3
+	github.com/containerd/continuity v0.0.0-20200413184840-d3ef23f19fbb // indirect
+	github.com/containerd/fifo v0.0.0-20200410184934-f15a3290365b // indirect
+	github.com/containerd/ttrpc v1.0.0 // indirect
+	github.com/containerd/typeurl v1.0.0 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/docker/distribution v2.7.0+incompatible
 	github.com/docker/docker v0.0.0-20171023200535-7848b8beb9d3
 	github.com/docker/go-connections v0.4.0
+	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
 	github.com/docker/go-units v0.3.3
 	github.com/docker/spdystream v0.0.0-20181023171402-6480d4af844c
 	github.com/evanphx/json-patch v4.1.0+incompatible
@@ -26,7 +33,8 @@ require (
 	github.com/go-openapi/jsonreference v0.19.0
 	github.com/go-openapi/spec v0.19.0
 	github.com/go-openapi/swag v0.19.0
-	github.com/gogo/protobuf v1.2.0
+	github.com/gogo/googleapis v1.3.2 // indirect
+	github.com/gogo/protobuf v1.3.1
 	github.com/golang/protobuf v1.3.2
 	github.com/google/btree v1.0.0
 	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf
@@ -45,10 +53,12 @@ require (
 	github.com/modern-go/reflect2 v0.0.0-20180701023420-4b7aa43c6742
 	github.com/opencontainers/go-digest v1.0.0-rc1
 	github.com/opencontainers/image-spec v1.0.1
+	github.com/opencontainers/runc v0.1.1 // indirect
+	github.com/opencontainers/runtime-spec v1.0.2 // indirect
 	github.com/pborman/uuid v0.0.0-20180906182336-adf5a7427709
 	github.com/petar/GoLLRB v0.0.0-20130427215148-53be0d36a84c
 	github.com/peterbourgon/diskv v2.0.1+incompatible
-	github.com/pkg/errors v0.8.0
+	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v0.9.2
 	github.com/prometheus/client_model v0.0.0-20180712105110-5c3871d89910
 	github.com/prometheus/common v0.0.0-20181218105931-67670fe90761
@@ -58,12 +68,13 @@ require (
 	github.com/sirupsen/logrus v1.1.1
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/pflag v1.0.3
+	github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2 // indirect
 	go.opencensus.io v0.22.0
 	golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
 	golang.org/x/net v0.0.0-20190628185345-da137c7871d7
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
-	golang.org/x/sys v0.0.0-20190712062909-fae7ac547cb7
+	golang.org/x/sys v0.0.0-20191210023423-ac6580df4449
 	golang.org/x/text v0.3.2
 	golang.org/x/time v0.0.0-20181108054448-85acf8d2951c
 	google.golang.org/api v0.7.0
