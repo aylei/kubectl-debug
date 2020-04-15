@@ -75,7 +75,7 @@ func NewRuntimeManager(host string, containerUri string, timeout time.Duration, 
 
 // DebugAttacher implements Attacher
 // we use this struct in order to inject debug info (image, command) in the debug procedure
-type DebugAttacher struct {
+type DebugAttacherDocker struct {
 	runtime      *RuntimeManager
 	image        string
 	authStr      string
@@ -90,7 +90,9 @@ type DebugAttacher struct {
 	cancel        context.CancelFunc
 }
 
-func (a *DebugAttacher) AttachContainer(name string, uid kubetype.UID, container string, in io.Reader, out, err io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error {
+var DebugAttacherDockerImplementsAttacher kubeletremote.Attacher = (*DebugAttacherDocker)(nil)
+
+func (a *DebugAttacherDocker) AttachContainer(name string, uid kubetype.UID, container string, in io.Reader, out, err io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error {
 	if a.verbosity > 0 {
 		log.Println("Enter")
 	}
@@ -99,7 +101,7 @@ func (a *DebugAttacher) AttachContainer(name string, uid kubetype.UID, container
 
 // GetAttacher returns an implementation of Attacher
 func (m *RuntimeManager) GetAttacher(image, authStr string, lxcfsEnabled bool, command []string, context context.Context, cancel context.CancelFunc) kubeletremote.Attacher {
-	return &DebugAttacher{
+	return &DebugAttacherDocker{
 		runtime:       m,
 		image:         image,
 		authStr:       authStr,
@@ -114,7 +116,7 @@ func (m *RuntimeManager) GetAttacher(image, authStr string, lxcfsEnabled bool, c
 }
 
 // DebugContainer executes the main debug flow
-func (m *DebugAttacher) DebugContainer(container, image string, authStr string, command []string, stdin io.Reader, stdout, stderr io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error {
+func (m *DebugAttacherDocker) DebugContainer(container, image string, authStr string, command []string, stdin io.Reader, stdout, stderr io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error {
 	if m.verbosity > 0 {
 		log.Println("Enter")
 	}
@@ -184,7 +186,7 @@ func (m *DebugAttacher) DebugContainer(container, image string, authStr string, 
 	return nil
 }
 
-func (m *DebugAttacher) SetContainerLxcfs(container string) error {
+func (m *DebugAttacherDocker) SetContainerLxcfs(container string) error {
 	ctx, cancel := m.getContextWithTimeout()
 	defer cancel()
 	containerInstance, err := m.client.ContainerInspect(ctx, container)
@@ -213,7 +215,7 @@ func (m *DebugAttacher) SetContainerLxcfs(container string) error {
 
 // Run a new container, this container will join the network,
 // mount, and pid namespace of the given container
-func (m *DebugAttacher) RunDebugContainer(targetId string, image string, command []string) (string, error) {
+func (m *DebugAttacherDocker) RunDebugContainer(targetId string, image string, command []string) (string, error) {
 
 	createdBody, err := m.CreateContainer(targetId, image, command)
 	if err != nil {
@@ -225,7 +227,7 @@ func (m *DebugAttacher) RunDebugContainer(targetId string, image string, command
 	return createdBody.ID, nil
 }
 
-func (m *DebugAttacher) StartContainer(id string) error {
+func (m *DebugAttacherDocker) StartContainer(id string) error {
 	ctx, cancel := m.getContextWithTimeout()
 	defer cancel()
 	err := m.client.ContainerStart(ctx, id, types.ContainerStartOptions{})
@@ -235,7 +237,7 @@ func (m *DebugAttacher) StartContainer(id string) error {
 	return nil
 }
 
-func (m *DebugAttacher) CreateContainer(targetId string, image string, command []string) (*container.ContainerCreateCreatedBody, error) {
+func (m *DebugAttacherDocker) CreateContainer(targetId string, image string, command []string) (*container.ContainerCreateCreatedBody, error) {
 
 	config := &container.Config{
 		Entrypoint: strslice.StrSlice(command),
@@ -260,7 +262,7 @@ func (m *DebugAttacher) CreateContainer(targetId string, image string, command [
 	return &body, nil
 }
 
-func (m *DebugAttacher) PullImage(image string, authStr string, stdout io.WriteCloser) error {
+func (m *DebugAttacherDocker) PullImage(image string, authStr string, stdout io.WriteCloser) error {
 	authBytes := base64.URLEncoding.EncodeToString([]byte(authStr))
 	out, err := m.client.ImagePull(m.context, image, types.ImagePullOptions{RegistryAuth: string(authBytes)})
 	if err != nil {
@@ -272,7 +274,7 @@ func (m *DebugAttacher) PullImage(image string, authStr string, stdout io.WriteC
 	return nil
 }
 
-func (m *DebugAttacher) CleanContainer(id string) {
+func (m *DebugAttacherDocker) CleanContainer(id string) {
 	// cleanup procedure should use background context
 	ctx, cancel := context.WithTimeout(context.Background(), m.runtime.timeout)
 	defer cancel()
@@ -296,7 +298,7 @@ func (m *DebugAttacher) CleanContainer(id string) {
 	}
 }
 
-func (m *DebugAttacher) RmContainer(id string, force bool) error {
+func (m *DebugAttacherDocker) RmContainer(id string, force bool) error {
 	// cleanup procedure should use background context
 	ctx, cancel := context.WithTimeout(context.Background(), m.runtime.timeout)
 	defer cancel()
@@ -311,7 +313,7 @@ func (m *DebugAttacher) RmContainer(id string, force bool) error {
 }
 
 // AttachToContainer do `docker attach`
-func (m *DebugAttacher) AttachToContainer(container string, stdin io.Reader, stdout, stderr io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error {
+func (m *DebugAttacherDocker) AttachToContainer(container string, stdin io.Reader, stdout, stderr io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error {
 	HandleResizing(resize, func(size remotecommand.TerminalSize) {
 		m.resizeContainerTTY(container, uint(size.Height), uint(size.Width))
 	})
@@ -341,7 +343,7 @@ func (m *DebugAttacher) AttachToContainer(container string, stdin io.Reader, std
 
 // holdHijackedConnection hold the HijackedResponse, redirect the inputStream to the connection, and redirect the response
 // stream to stdout and stderr. NOTE: If needed, we could also add context in this function.
-func (m *DebugAttacher) holdHijackedConnection(tty bool, inputStream io.Reader, outputStream, errorStream io.Writer, resp types.HijackedResponse) error {
+func (m *DebugAttacherDocker) holdHijackedConnection(tty bool, inputStream io.Reader, outputStream, errorStream io.Writer, resp types.HijackedResponse) error {
 	receiveStdout := make(chan error)
 	if outputStream != nil || errorStream != nil {
 		go func() {
@@ -369,7 +371,7 @@ func (m *DebugAttacher) holdHijackedConnection(tty bool, inputStream io.Reader, 
 	return nil
 }
 
-func (m *DebugAttacher) redirectResponseToOutputStream(tty bool, outputStream, errorStream io.Writer, resp io.Reader) error {
+func (m *DebugAttacherDocker) redirectResponseToOutputStream(tty bool, outputStream, errorStream io.Writer, resp io.Reader) error {
 	if outputStream == nil {
 		outputStream = ioutil.Discard
 	}
@@ -385,7 +387,7 @@ func (m *DebugAttacher) redirectResponseToOutputStream(tty bool, outputStream, e
 	return err
 }
 
-func (m *DebugAttacher) resizeContainerTTY(id string, height, width uint) error {
+func (m *DebugAttacherDocker) resizeContainerTTY(id string, height, width uint) error {
 	ctx, cancel := m.getContextWithTimeout()
 	defer cancel()
 	return m.client.ContainerResize(ctx, id, types.ResizeOptions{
@@ -394,10 +396,10 @@ func (m *DebugAttacher) resizeContainerTTY(id string, height, width uint) error 
 	})
 }
 
-func (m *DebugAttacher) getContextWithTimeout() (context.Context, context.CancelFunc) {
+func (m *DebugAttacherDocker) getContextWithTimeout() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(m.context, m.runtime.timeout)
 }
 
-func (m *DebugAttacher) containerMode(id string) string {
+func (m *DebugAttacherDocker) containerMode(id string) string {
 	return fmt.Sprintf("container:%s", id)
 }
