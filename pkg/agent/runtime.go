@@ -3,10 +3,12 @@ package agent
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/aylei/kubectl-debug/pkg/nsenter"
@@ -22,24 +24,52 @@ import (
 	kubeletremote "k8s.io/kubernetes/pkg/kubelet/server/remotecommand"
 )
 
+type ContainerRuntimeScheme string
+
+const (
+	DockerScheme     ContainerRuntimeScheme = "docker"
+	ContainerdScheme ContainerRuntimeScheme = "containerd"
+)
+
 // RuntimeManager is responsible for docker operation
 type RuntimeManager struct {
-	client      *dockerclient.Client
-	timeout     time.Duration
-	verbosity   int
-	containerId string
+	client          *dockerclient.Client
+	timeout         time.Duration
+	verbosity       int
+	containerId     string
+	containerScheme ContainerRuntimeScheme
 }
 
-func NewRuntimeManager(host string, containerId string, timeout time.Duration, verbosity int) (*RuntimeManager, error) {
+func NewRuntimeManager(host string, containerUri string, timeout time.Duration, verbosity int) (*RuntimeManager, error) {
 	client, err := dockerclient.NewClient(host, "", nil, nil)
 	if err != nil {
 		return nil, err
 	}
+	if len(containerUri) < 1 {
+		return nil, errors.New("target container id must be provided")
+	}
+	containerUriParts := strings.SplitN(containerUri, "://", 2)
+	if len(containerUriParts) != 2 {
+		msg := fmt.Sprintf("target container id must have form scheme:id but was %v", containerUri)
+		log.Println(msg)
+		return nil, errors.New(msg)
+	}
+	containerScheme := ContainerRuntimeScheme(containerUriParts[0])
+	containerId := containerUriParts[1]
+
+	// 2020-04-09 d : TODO Need to touch this in order to support containerd
+	if containerScheme != DockerScheme {
+		msg := "only docker container container runtime is suppored right now"
+		log.Println(msg)
+		return nil, errors.New(msg)
+	}
+
 	return &RuntimeManager{
-		client:      client,
-		timeout:     timeout,
-		verbosity:   verbosity,
-		containerId: containerId,
+		client:          client,
+		timeout:         timeout,
+		verbosity:       verbosity,
+		containerId:     containerId,
+		containerScheme: containerScheme,
 	}, nil
 }
 

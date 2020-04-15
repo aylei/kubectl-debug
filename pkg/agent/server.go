@@ -16,10 +16,6 @@ import (
 	kubeletremote "k8s.io/kubernetes/pkg/kubelet/server/remotecommand"
 )
 
-const (
-	dockerContainerPrefix = "docker://"
-)
-
 type Server struct {
 	config *Config
 }
@@ -56,8 +52,8 @@ func (s *Server) Run() error {
 	return nil
 }
 
-func minInt(lhs, rhs int) int {
-	if lhs <= rhs {
+func maxInt(lhs, rhs int) int {
+	if lhs >= rhs {
 		return lhs
 	}
 	return rhs
@@ -72,20 +68,7 @@ func minInt(lhs, rhs int) int {
 func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 
 	log.Println("receive debug request")
-	gContainerId := req.FormValue("container")
-	if len(gContainerId) < 1 {
-		log.Println("target container id must be provided")
-		http.Error(w, "target container id must be provided", 400)
-		return
-	}
-
-	// 2020-04-09 d : TODO Need to touch this in order to support containerd
-	if !strings.HasPrefix(gContainerId, dockerContainerPrefix) {
-		log.Println("only docker container containre runtime is suppored right now")
-		http.Error(w, "only docker container runtime is suppored right now", 400)
-		return
-	}
-	containerId := gContainerId[len(dockerContainerPrefix):]
+	containerUri := req.FormValue("container")
 
 	image := req.FormValue("image")
 	if len(image) < 1 {
@@ -122,10 +105,17 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 	defer cancel()
 
 	// 2020-04-09 d : TODO Need to touch this in order to support containerd
-	runtime, err := NewRuntimeManager(s.config.DockerEndpoint, containerId, s.config.DockerTimeout,
-		minInt(iverbosity, s.config.Verbosity))
+	runtime, err := NewRuntimeManager(s.config.DockerEndpoint, containerUri, s.config.DockerTimeout,
+		maxInt(iverbosity, s.config.Verbosity))
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to construct RuntimeManager.  Error: %v", err), 400)
+		msg := fmt.Sprintf("Failed to construct RuntimeManager.  Error: %s", err.Error())
+		log.Println(msg)
+		// 2020-04-15 d :
+		// The client will be in SPDY roundtripper when we return this.  This passes the response to
+		// statusCodecs.UniversalDecoder().Decode.  Decode will see any ":" as indication that the
+		// response bytes are an object to be deserialized and consequently our message to the client
+		// will be lost.
+		http.Error(w, strings.ReplaceAll(msg, ":", "-"), 400)
 		return
 	}
 
@@ -140,7 +130,7 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 		runtime.GetAttacher(image, authStr, LxcfsEnabled, commandSlice, context, cancel),
 		"",
 		"",
-		containerId,
+		"",
 		streamOpts,
 		s.config.StreamIdleTimeout,
 		s.config.StreamCreationTimeout,
