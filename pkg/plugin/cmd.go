@@ -562,6 +562,7 @@ func (o *DebugOptions) Run() error {
 		params := url.Values{}
 		params.Add("image", o.Image)
 		params.Add("container", containerID)
+		params.Add("verbosity", fmt.Sprintf("%v", o.Verbosity))
 		if o.IsLxcfsEnabled {
 			params.Add("lxcfsEnabled", "true")
 		} else {

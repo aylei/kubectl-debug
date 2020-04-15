@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"time"
 
@@ -53,6 +54,13 @@ func (s *Server) Run() error {
 	server.Shutdown(ctx)
 
 	return nil
+}
+
+func minInt(lhs, rhs int) int {
+	if lhs <= rhs {
+		return lhs
+	}
+	return rhs
 }
 
 // ServeDebug serves the debug request.
@@ -104,14 +112,20 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 	} else if lxcfsEnabled == "true" {
 		LxcfsEnabled = true
 	}
+	sverbosity := req.FormValue("verbosity")
+	if sverbosity == "" {
+		sverbosity = "0"
+	}
+	iverbosity, _ := strconv.Atoi(sverbosity)
 
 	context, cancel := context.WithCancel(req.Context())
 	defer cancel()
 
 	// 2020-04-09 d : TODO Need to touch this in order to support containerd
-	runtime, err := NewRuntimeManager(s.config.DockerEndpoint, s.config.DockerTimeout, s.config.Verbosity)
+	runtime, err := NewRuntimeManager(s.config.DockerEndpoint, s.config.DockerTimeout,
+		minInt(iverbosity, s.config.Verbosity))
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to construct RuntimeManager.  Error: ", err), 400)
+		http.Error(w, fmt.Sprintf("Failed to construct RuntimeManager.  Error: %v", err), 400)
 		return
 	}
 
