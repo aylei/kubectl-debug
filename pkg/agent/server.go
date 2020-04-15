@@ -72,20 +72,20 @@ func minInt(lhs, rhs int) int {
 func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 
 	log.Println("receive debug request")
-	containerId := req.FormValue("container")
-	if len(containerId) < 1 {
+	gContainerId := req.FormValue("container")
+	if len(gContainerId) < 1 {
 		log.Println("target container id must be provided")
 		http.Error(w, "target container id must be provided", 400)
 		return
 	}
 
 	// 2020-04-09 d : TODO Need to touch this in order to support containerd
-	if !strings.HasPrefix(containerId, dockerContainerPrefix) {
+	if !strings.HasPrefix(gContainerId, dockerContainerPrefix) {
 		log.Println("only docker container containre runtime is suppored right now")
 		http.Error(w, "only docker container runtime is suppored right now", 400)
 		return
 	}
-	dockerContainerId := containerId[len(dockerContainerPrefix):]
+	containerId := gContainerId[len(dockerContainerPrefix):]
 
 	image := req.FormValue("image")
 	if len(image) < 1 {
@@ -122,7 +122,7 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 	defer cancel()
 
 	// 2020-04-09 d : TODO Need to touch this in order to support containerd
-	runtime, err := NewRuntimeManager(s.config.DockerEndpoint, s.config.DockerTimeout,
+	runtime, err := NewRuntimeManager(s.config.DockerEndpoint, containerId, s.config.DockerTimeout,
 		minInt(iverbosity, s.config.Verbosity))
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to construct RuntimeManager.  Error: %v", err), 400)
@@ -140,7 +140,7 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 		runtime.GetAttacher(image, authStr, LxcfsEnabled, commandSlice, context, cancel),
 		"",
 		"",
-		dockerContainerId,
+		containerId,
 		streamOpts,
 		s.config.StreamIdleTimeout,
 		s.config.StreamCreationTimeout,

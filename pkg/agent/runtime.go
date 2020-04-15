@@ -24,20 +24,22 @@ import (
 
 // RuntimeManager is responsible for docker operation
 type RuntimeManager struct {
-	client    *dockerclient.Client
-	timeout   time.Duration
-	verbosity int
+	client      *dockerclient.Client
+	timeout     time.Duration
+	verbosity   int
+	containerId string
 }
 
-func NewRuntimeManager(host string, timeout time.Duration, verbosity int) (*RuntimeManager, error) {
+func NewRuntimeManager(host string, containerId string, timeout time.Duration, verbosity int) (*RuntimeManager, error) {
 	client, err := dockerclient.NewClient(host, "", nil, nil)
 	if err != nil {
 		return nil, err
 	}
 	return &RuntimeManager{
-		client:    client,
-		timeout:   timeout,
-		verbosity: verbosity,
+		client:      client,
+		timeout:     timeout,
+		verbosity:   verbosity,
+		containerId: containerId,
 	}, nil
 }
 
