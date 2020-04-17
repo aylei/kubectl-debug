@@ -26,6 +26,7 @@ import (
 	"github.com/containerd/containerd/pkg/progress"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
+	"github.com/containerd/typeurl"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/strslice"
@@ -33,6 +34,7 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	kubetype "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/remotecommand"
 	kubeletremote "k8s.io/kubernetes/pkg/kubelet/server/remotecommand"
@@ -46,7 +48,7 @@ const (
 )
 
 type ContainerInfo struct {
-	Pid               int
+	Pid               int64
 	MountDestinations []string
 }
 
@@ -97,7 +99,7 @@ func (c *DockerContainerRuntime) ContainerInfo(ctx context.Context, targetContai
 	if err != nil {
 		return ContainerInfo{}, err
 	}
-	ret.Pid = cntnr.State.Pid
+	ret.Pid = int64(cntnr.State.Pid)
 	for _, mount := range cntnr.Mounts {
 		ret.MountDestinations = append(ret.MountDestinations, mount.Destination)
 	}
@@ -551,12 +553,56 @@ func (c *ContainerdContainerRuntime) PullImage(
 		log.Printf("Failed to download image: %v\r\n", err)
 		return err
 	}
-	//return err
-	return errors.New("Containerd support is not complete yet")
+	return err
 }
 
-func (c *ContainerdContainerRuntime) ContainerInfo(ctx context.Context, targetContainerId string) (ContainerInfo, error) {
-	return ContainerInfo{}, nil
+func (c *ContainerdContainerRuntime) ContainerInfo(
+	ctx context.Context, targetContainerId string) (ContainerInfo, error) {
+	ctx = namespaces.WithNamespace(ctx, "k8s.io")
+	cntnr, err := c.client.LoadContainer(ctx, targetContainerId)
+	if err != nil {
+		log.Printf("Failed to access target container %s : %v\r\n",
+			targetContainerId, err)
+
+		return ContainerInfo{}, err
+	}
+	tsk, err := cntnr.Task(ctx, nil)
+	if err != nil {
+		log.Printf("Failed to get task of target container %s : %v\r\n",
+			targetContainerId, err)
+
+		return ContainerInfo{}, err
+	}
+	pids, err := tsk.Pids(ctx)
+	if err != nil {
+		log.Printf("Failed to get pids of target container %s : %v\r\n",
+			targetContainerId, err)
+
+		return ContainerInfo{}, err
+	}
+
+	info, err := cntnr.Info(ctx, containerd.WithoutRefreshedMetadata)
+	if err != nil {
+		log.Printf("Failed to load target container info %s : %v\r\n",
+			targetContainerId, err)
+
+		return ContainerInfo{}, err
+	}
+
+	ret := ContainerInfo{Pid: int64(pids[0].Pid)}
+	if info.Spec != nil && info.Spec.Value != nil {
+		v, err := typeurl.UnmarshalAny(info.Spec)
+		if err != nil {
+			log.Printf("Error unmarshalling spec for container %s : %v\r\n",
+				targetContainerId, err)
+		}
+		for _, mnt := range v.(*specs.Spec).Mounts {
+			ret.MountDestinations = append(ret.MountDestinations, mnt.Destination)
+			fmt.Printf("%+v\r\n", mnt)
+		}
+	}
+
+	return ret, nil
 }
 
 func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
