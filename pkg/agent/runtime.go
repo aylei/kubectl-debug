@@ -2,23 +2,37 @@ package agent
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
+	"net/http"
 	"strings"
+	"sync"
+	"text/tabwriter"
 	"time"
 
 	"github.com/aylei/kubectl-debug/pkg/nsenter"
 	term "github.com/aylei/kubectl-debug/pkg/util"
 	containerd "github.com/containerd/containerd"
+	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/errdefs"
+	glog "github.com/containerd/containerd/log"
+	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/pkg/progress"
+	"github.com/containerd/containerd/remotes"
+	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/strslice"
 	dockerclient "github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	kubetype "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/remotecommand"
 	kubeletremote "k8s.io/kubernetes/pkg/kubelet/server/remotecommand"
@@ -267,12 +281,278 @@ func (c *DockerContainerRuntime) redirectResponseToOutputStream(cfg RunConfig, r
 
 type ContainerdContainerRuntime struct {
 	client *containerd.Client
+	image  containerd.Image
 }
 
 var ContainerdContainerRuntimeImplementsContainerRuntime ContainerRuntime = (*ContainerdContainerRuntime)(nil)
 
-func (c *ContainerdContainerRuntime) PullImage(ctx context.Context, image string, authStr string, stdout io.WriteCloser) error {
-	return nil
+var PushTracker = docker.NewInMemoryTracker()
+
+type jobs struct {
+	name     string
+	added    map[digest.Digest]struct{}
+	descs    []ocispec.Descriptor
+	mu       sync.Mutex
+	resolved bool
+}
+
+func (j *jobs) isResolved() bool {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.resolved
+}
+
+func (j *jobs) jobs() []ocispec.Descriptor {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+
+	var descs []ocispec.Descriptor
+	return append(descs, j.descs...)
+}
+
+func newJobs(name string) *jobs {
+	return &jobs{
+		name:  name,
+		added: map[digest.Digest]struct{}{},
+	}
+}
+
+type StatusInfo struct {
+	Ref       string
+	Status    string
+	Offset    int64
+	Total     int64
+	StartedAt time.Time
+	UpdatedAt time.Time
+}
+
+func Display(w io.Writer, statuses []StatusInfo, start time.Time) {
+	var total int64
+	for _, status := range statuses {
+		total += status.Offset
+		switch status.Status {
+		case "downloading", "uploading":
+			var bar progress.Bar
+			if status.Total > 0.0 {
+				bar = progress.Bar(float64(status.Offset) / float64(status.Total))
+			}
+			fmt.Fprintf(w, "%s:\t%s\t%40r\t%8.8s/%s\t\r\n",
+				status.Ref,
+				status.Status,
+				bar,
+				progress.Bytes(status.Offset), progress.Bytes(status.Total))
+		case "resolving", "waiting":
+			bar := progress.Bar(0.0)
+			fmt.Fprintf(w, "%s:\t%s\t%40r\t\r\n",
+				status.Ref,
+				status.Status,
+				bar)
+		default:
+			bar := progress.Bar(1.0)
+			fmt.Fprintf(w, "%s:\t%s\t%40r\t\r\n",
+				status.Ref,
+				status.Status,
+				bar)
+		}
+	}
+
+	fmt.Fprintf(w, "elapsed: %-4.1fs\ttotal: %7.6v\t(%v)\t\r\n",
+		time.Since(start).Seconds(),
+		// TODO(stevvooe): These calculations are actually way off.
+		// Need to account for previously downloaded data. These
+		// will basically be right for a download the first time
+		// but will be skewed if restarting, as it includes the
+		// data into the start time before.
+		progress.Bytes(total),
+		progress.NewBytesPerSecond(total, time.Since(start)))
+}
+
+func showProgress(ctx context.Context, ongoing *jobs, cs content.Store, out io.Writer) {
+	var (
+		ticker   = time.NewTicker(100 * time.Millisecond)
+		fw       = progress.NewWriter(out)
+		start    = time.Now()
+		statuses = map[string]StatusInfo{}
+		done     bool
+	)
+	defer ticker.Stop()
+
+outer:
+	for {
+		select {
+		case <-ticker.C:
+			fw.Flush()
+
+			tw := tabwriter.NewWriter(fw, 1, 8, 1, ' ', 0)
+
+			resolved := "resolved"
+			if !ongoing.isResolved() {
+				resolved = "resolving"
+			}
+			statuses[ongoing.name] = StatusInfo{
+				Ref:    ongoing.name,
+				Status: resolved,
+			}
+			keys := []string{ongoing.name}
+
+			activeSeen := map[string]struct{}{}
+			if !done {
+				active, err := cs.ListStatuses(ctx, "")
+				if err != nil {
+					glog.G(ctx).WithError(err).Error("active check failed")
+					continue
+				}
+				// update status of active entries!
+				for _, active := range active {
+					statuses[active.Ref] = StatusInfo{
+						Ref:       active.Ref,
+						Status:    "downloading",
+						Offset:    active.Offset,
+						Total:     active.Total,
+						StartedAt: active.StartedAt,
+						UpdatedAt: active.UpdatedAt,
+					}
+					activeSeen[active.Ref] = struct{}{}
+				}
+			}
+
+			// now, update the items in jobs that are not in active
+			for _, j := range ongoing.jobs() {
+				key := remotes.MakeRefKey(ctx, j)
+				keys = append(keys, key)
+				if _, ok := activeSeen[key]; ok {
+					continue
+				}
+
+				status, ok := statuses[key]
+				if !done && (!ok || status.Status == "downloading") {
+					info, err := cs.Info(ctx, j.Digest)
+					if err != nil {
+						if !errdefs.IsNotFound(err) {
+							glog.G(ctx).WithError(err).Errorf("failed to get content info")
+							continue outer
+						} else {
+							statuses[key] = StatusInfo{
+								Ref:    key,
+								Status: "waiting",
+							}
+						}
+					} else if info.CreatedAt.After(start) {
+						statuses[key] = StatusInfo{
+							Ref:       key,
+							Status:    "done",
+							Offset:    info.Size,
+							Total:     info.Size,
+							UpdatedAt: info.CreatedAt,
+						}
+					} else {
+						statuses[key] = StatusInfo{
+							Ref:    key,
+							Status: "exists",
+						}
+					}
+				} else if done {
+					if ok {
+						if status.Status != "done" && status.Status != "exists" {
+							status.Status = "done"
+							statuses[key] = status
+						}
+					} else {
+						statuses[key] = StatusInfo{
+							Ref:    key,
+							Status: "done",
+						}
+					}
+				}
+			}
+
+			var ordered []StatusInfo
+			for _, key := range keys {
+				ordered = append(ordered, statuses[key])
+			}
+
+			Display(tw, ordered, start)
+			tw.Flush()
+
+			if done {
+				fw.Flush()
+				return
+			}
+		case <-ctx.Done():
+			done = true // allow ui to update once more
+		}
+	}
+}
+
+func (c *ContainerdContainerRuntime) PullImage(
+	ctx context.Context, image string, authStr string,
+	stdout io.WriteCloser) error {
+
+	ctx = namespaces.WithNamespace(ctx, "p2paas-ops")
+
+	ongoing := newJobs(image)
+	pctx, stopProgress := context.WithCancel(ctx)
+	progress := make(chan struct{})
+	go func() {
+		if stdout != nil {
+			// no progress bar, because it hides some debug logs
+			showProgress(pctx, ongoing, c.client.ContentStore(), stdout)
+		}
+		close(progress)
+	}()
+
+	rslvrOpts := docker.ResolverOptions{
+		Tracker: PushTracker,
+	}
+
+	rmtOpts := []containerd.RemoteOpt{
+		containerd.WithPullUnpack,
+	}
+
+	crds := strings.Split(authStr, ":")
+	if len(crds) == 2 {
+		crdsClbck := func(host string) (string, string, error) {
+			return crds[0], crds[1], nil
+		}
+
+		tr := &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).DialContext,
+			MaxIdleConns:        10,
+			IdleConnTimeout:     30 * time.Second,
+			TLSHandshakeTimeout: 10 * time.Second,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true, // TODO Add param for this.
+			},
+			ExpectContinueTimeout: 5 * time.Second,
+		}
+
+		rslvrOpts.Client = &http.Client{
+			Transport: tr,
+		}
+
+		authOpts := []docker.AuthorizerOpt{
+			docker.WithAuthClient(rslvrOpts.Client), docker.WithAuthCreds(crdsClbck),
+		}
+
+		rslvrOpts.Authorizer = docker.NewDockerAuthorizer(authOpts...)
+		rmtOpts = append(rmtOpts, containerd.WithResolver(docker.NewResolver(rslvrOpts)))
+	}
+
+	var err error
+	c.image, err = c.client.Pull(ctx, image, rmtOpts...)
+	stopProgress()
+
+	if err != nil {
+		log.Printf("Failed to download image: %v\r\n", err)
+		return err
+	}
+	//return err
+	return errors.New("Containerd support is not complete yet")
 }
 
 func (c *ContainerdContainerRuntime) ContainerInfo(ctx context.Context, targetContainerId string) (ContainerInfo, error) {
@@ -329,7 +609,7 @@ func (m *DebugAttacher) DebugContainer(cfg RunConfig) error {
 	if m.verbosity > 0 {
 		log.Println("Enter")
 	}
-	log.Printf("Accept new debug reqeust:\n\t target container: %s \n\t image: %s \n\t command: %v \n", m.idOfContainerToDebug, m.image, m.command)
+	log.Printf("Accept new debug request:\n\t target container: %s \n\t image: %s \n\t command: %v \n", m.idOfContainerToDebug, m.image, m.command)
 
 	// the following steps may takes much time,
 	// so we listen to EOF from stdin
@@ -449,7 +729,6 @@ func NewRuntimeManager(srvCfg Config, containerUri string, verbosity int) (*Runt
 			if err != nil {
 				return nil, err
 			}
-			return nil, errors.New("Containerd support is not yet complete.")
 		}
 	default:
 		{

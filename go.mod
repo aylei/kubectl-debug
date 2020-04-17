@@ -13,15 +13,15 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578
 	github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973
-	github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible // 2020-04-15 d : https://github.com/containerd/containerd/issues/3031
 	github.com/census-instrumentation/opencensus-proto v0.2.1
+	github.com/containerd/console v1.0.0 // indirect
 	github.com/containerd/containerd v1.3.3
 	github.com/containerd/continuity v0.0.0-20200413184840-d3ef23f19fbb // indirect
 	github.com/containerd/fifo v0.0.0-20200410184934-f15a3290365b // indirect
 	github.com/containerd/ttrpc v1.0.0 // indirect
 	github.com/containerd/typeurl v1.0.0 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
-	github.com/docker/distribution v2.7.0+incompatible
+	github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible // 2020-04-15 d : https://github.com/containerd/containerd/issues/3031
 	github.com/docker/docker v0.0.0-20171023200535-7848b8beb9d3
 	github.com/docker/go-connections v0.4.0
 	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
