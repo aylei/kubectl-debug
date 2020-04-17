@@ -337,6 +337,8 @@ k8s.io/cli-runtime v0.0.0-20190228180923-a9e421a79326 h1:uMY/EHQt0VHYgRMPWwPl/vQ
 k8s.io/cli-runtime v0.0.0-20190228180923-a9e421a79326/go.mod h1:qWnH3/b8sp/l7EvlDh7ulDU3UWA4P4N1NFbEEP791tM=
 k8s.io/client-go v0.0.0-20190228174230-b40b2a5939e4 h1:aE8wOCKuoRs2aU0OP/Rz8SXiAB0FTTku3VtGhhrkSmc=
 k8s.io/client-go v0.0.0-20190228174230-b40b2a5939e4/go.mod h1:7vJpHMYJwNQCWgzmNV+VYUl1zCObLyodBc8nIyt8L5s=
+k8s.io/client-go v1.5.1 h1:XaX/lo2/u3/pmFau8HN+sB5C/b4dc4Dmm2eXjBH4p1E=
+k8s.io/client-go v11.0.0+incompatible h1:LBbX2+lOwY9flffWlJM7f1Ct8V2SRNiMRDFeiwnJo9o=
 k8s.io/klog v0.1.0 h1:I5HMfc/DtuVaGR1KPwUrTc476K8NCqNBldC7H4dYEzk=
 k8s.io/klog v0.1.0/go.mod h1:Gq+BEi5rUBO/HRz0bTSXDUcqjScdoY3a9IHpCEIOOfk=
 k8s.io/kube-openapi v0.0.0-20190320154901-5e45bb682580 h1:fq0ZXW/BAIFZH+dazlups6JTVdwzRo5d9riFA103yuQ=
