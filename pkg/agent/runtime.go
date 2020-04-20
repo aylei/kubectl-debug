@@ -19,10 +19,12 @@ import (
 	"github.com/aylei/kubectl-debug/pkg/nsenter"
 	term "github.com/aylei/kubectl-debug/pkg/util"
 	containerd "github.com/containerd/containerd"
+	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	glog "github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/oci"
 	"github.com/containerd/containerd/pkg/progress"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
@@ -45,6 +47,8 @@ type ContainerRuntimeScheme string
 const (
 	DockerScheme     ContainerRuntimeScheme = "docker"
 	ContainerdScheme ContainerRuntimeScheme = "containerd"
+	KubectlDebugNS   string                 = "kubectl-debug"
+	K8NS             string                 = "k8s.io"
 )
 
 type ContainerInfo struct {
@@ -70,7 +74,9 @@ func (c *RunConfig) getContextWithTimeout() (context.Context, context.CancelFunc
 }
 
 type ContainerRuntime interface {
-	PullImage(ctx context.Context, image string, authStr string, stdout io.WriteCloser) error
+	PullImage(ctx context.Context, image string,
+		skipTLS bool, authStr string,
+		stdout io.WriteCloser) error
 	ContainerInfo(ctx context.Context, targetContainerId string) (ContainerInfo, error)
 	RunDebugContainer(cfg RunConfig) error
 }
@@ -81,7 +87,9 @@ type DockerContainerRuntime struct {
 
 var DockerContainerRuntimeImplementsContainerRuntime ContainerRuntime = (*DockerContainerRuntime)(nil)
 
-func (c *DockerContainerRuntime) PullImage(ctx context.Context, image string, authStr string, stdout io.WriteCloser) error {
+func (c *DockerContainerRuntime) PullImage(ctx context.Context,
+	image string, skipTLS bool, authStr string,
+	stdout io.WriteCloser) error {
 	authBytes := base64.URLEncoding.EncodeToString([]byte(authStr))
 	out, err := c.client.ImagePull(ctx, image, types.ImagePullOptions{RegistryAuth: string(authBytes)})
 	if err != nil {
@@ -284,6 +292,7 @@ func (c *DockerContainerRuntime) redirectResponseToOutputStream(cfg RunConfig, r
 type ContainerdContainerRuntime struct {
 	client *containerd.Client
 	image  containerd.Image
+	pid    int64
 }
 
 var ContainerdContainerRuntimeImplementsContainerRuntime ContainerRuntime = (*ContainerdContainerRuntime)(nil)
@@ -487,10 +496,11 @@ outer:
 }
 
 func (c *ContainerdContainerRuntime) PullImage(
-	ctx context.Context, image string, authStr string,
+	ctx context.Context, image string, skipTLS bool,
+	authStr string,
 	stdout io.WriteCloser) error {
 
-	ctx = namespaces.WithNamespace(ctx, "p2paas-ops")
+	ctx = namespaces.WithNamespace(ctx, KubectlDebugNS)
 
 	ongoing := newJobs(image)
 	pctx, stopProgress := context.WithCancel(ctx)
@@ -512,11 +522,8 @@ func (c *ContainerdContainerRuntime) PullImage(
 	}
 
 	crds := strings.Split(authStr, ":")
-	if len(crds) == 2 {
-		crdsClbck := func(host string) (string, string, error) {
-			return crds[0], crds[1], nil
-		}
-
+	var useCrds = len(crds) == 2
+	if useCrds || skipTLS {
 		tr := &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: (&net.Dialer{
@@ -528,7 +535,7 @@ func (c *ContainerdContainerRuntime) PullImage(
 			IdleConnTimeout:     30 * time.Second,
 			TLSHandshakeTimeout: 10 * time.Second,
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true, // TODO Add param for this.
+				InsecureSkipVerify: skipTLS,
 			},
 			ExpectContinueTimeout: 5 * time.Second,
 		}
@@ -537,11 +544,17 @@ func (c *ContainerdContainerRuntime) PullImage(
 			Transport: tr,
 		}
 
-		authOpts := []docker.AuthorizerOpt{
-			docker.WithAuthClient(rslvrOpts.Client), docker.WithAuthCreds(crdsClbck),
-		}
+		if useCrds {
+			crdsClbck := func(host string) (string, string, error) {
+				return crds[0], crds[1], nil
+			}
 
-		rslvrOpts.Authorizer = docker.NewDockerAuthorizer(authOpts...)
+			authOpts := []docker.AuthorizerOpt{
+				docker.WithAuthClient(rslvrOpts.Client), docker.WithAuthCreds(crdsClbck),
+			}
+
+			rslvrOpts.Authorizer = docker.NewDockerAuthorizer(authOpts...)
+		}
 		rmtOpts = append(rmtOpts, containerd.WithResolver(docker.NewResolver(rslvrOpts)))
 	}
 
@@ -558,7 +571,7 @@ func (c *ContainerdContainerRuntime) PullImage(
 
 func (c *ContainerdContainerRuntime) ContainerInfo(
 	ctx context.Context, targetContainerId string) (ContainerInfo, error) {
-	ctx = namespaces.WithNamespace(ctx, "k8s.io")
+	ctx = namespaces.WithNamespace(ctx, K8NS)
 	cntnr, err := c.client.LoadContainer(ctx, targetContainerId)
 	if err != nil {
 		log.Printf("Failed to access target container %s : %v\r\n",
@@ -602,10 +615,97 @@ func (c *ContainerdContainerRuntime) ContainerInfo(
 		}
 	}
 
+	c.pid = ret.Pid
 	return ret, nil
 }
 
+const (
+	// netNSFormat is the format of network namespace of a process.
+	netNSFormat = "/proc/%v/ns/net"
+	// ipcNSFormat is the format of ipc namespace of a process.
+	ipcNSFormat = "/proc/%v/ns/ipc"
+	// utsNSFormat is the format of uts namespace of a process.
+	userNSFormat = "/proc/%v/ns/user"
+	// pidNSFormat is the format of pid namespace of a process.
+	pidNSFormat = "/proc/%v/ns/pid"
+)
+
+func GetNetworkNamespace(pid int64) string {
+	return fmt.Sprintf(netNSFormat, pid)
+}
+func GetIPCNamespace(pid int64) string {
+	return fmt.Sprintf(ipcNSFormat, pid)
+}
+func GetUserNamespace(pid int64) string {
+	return fmt.Sprintf(userNSFormat, pid)
+}
+func GetPIDNamespace(pid int64) string {
+	return fmt.Sprintf(pidNSFormat, pid)
+}
+
 func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
+	ctx := namespaces.WithNamespace(cfg.context, KubectlDebugNS)
+
+	var spcOpts []oci.SpecOpts
+	spcOpts = append(spcOpts, oci.WithImageConfig(c.image))
+	spcOpts = append(spcOpts, oci.WithPrivileged)
+	spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
+		Type: specs.NetworkNamespace,
+		Path: GetNetworkNamespace(c.pid),
+	}))
+	spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
+		Type: specs.UserNamespace,
+		Path: GetUserNamespace(c.pid),
+	}))
+	spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
+		Type: specs.IPCNamespace,
+		Path: GetIPCNamespace(c.pid),
+	}))
+	spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
+		Type: specs.PIDNamespace,
+		Path: GetPIDNamespace(c.pid),
+	}))
+	cntnr, err := c.client.NewContainer(
+		ctx,
+		"debug-"+cfg.idOfContainerToDebug,
+		containerd.WithImage(c.image),
+		containerd.WithNewSnapshot("netshoot-snapshot", c.image), // Had hoped this would fix 2020/04/17 17:04:31 runtime.go:672: Failed to create container for debugging 3d4059893a086fc7c59991fde9835ac7e35b754cd017a300292af9c721a4e6b9 : rootfs absolute path is required but it did not
+		containerd.WithNewSpec(spcOpts...),
+	)
+	if err != nil {
+		log.Printf("Failed to create container for debugging %s\r\n",
+			cfg.idOfContainerToDebug)
+		return err
+	}
+
+	defer cntnr.Delete(ctx, containerd.WithSnapshotCleanup)
+
+	tsk, err := cntnr.NewTask(ctx,
+		cio.NewCreator(
+			cio.WithStreams(cfg.stdin, cfg.stdout, cfg.stderr),
+		))
+	if err != nil {
+		log.Printf("Failed to create task for debugging %s : %v\r\n",
+			cfg.idOfContainerToDebug, err)
+		return err
+	}
+	defer tsk.Delete(ctx)
+
+	exitStatusC, err := tsk.Wait(ctx)
+	if err != nil {
+		log.Printf("Failed to get exit channel for task for debugging %s : %v\r\n",
+			cfg.idOfContainerToDebug, err)
+		return err
+	}
+
+	status := <-exitStatusC
+	_, _, err = status.Result()
+	if err != nil {
+		log.Printf("Failed to get exit status for task for debugging %s : %v\r\n",
+			cfg.idOfContainerToDebug, err)
+		return err
+	}
+
 	return nil
 }
 
@@ -615,6 +715,7 @@ type DebugAttacher struct {
 	containerRuntime     ContainerRuntime
 	image                string
 	authStr              string
+	registrySkipTLS      bool
 	lxcfsEnabled         bool
 	command              []string
 	timeout              time.Duration
@@ -695,8 +796,9 @@ func (m *DebugAttacher) DebugContainer(cfg RunConfig) error {
 	}
 
 	// step 1: pull image
-	cfg.stdout.Write([]byte(fmt.Sprintf("pulling image %s... \n\r", m.image)))
-	err := m.containerRuntime.PullImage(m.context, m.image, m.authStr, cfg.stdout)
+	cfg.stdout.Write([]byte(fmt.Sprintf("pulling image %s, skip TLS %v... \n\r", m.image, m.registrySkipTLS)))
+	err := m.containerRuntime.PullImage(m.context, m.image,
+		m.registrySkipTLS, m.authStr, cfg.stdout)
 	if err != nil {
 		return err
 	}
@@ -795,7 +897,10 @@ func NewRuntimeManager(srvCfg Config, containerUri string, verbosity int) (*Runt
 }
 
 // GetAttacher returns an implementation of Attacher
-func (m *RuntimeManager) GetAttacher(image, authStr string, lxcfsEnabled bool, command []string, context context.Context, cancel context.CancelFunc) kubeletremote.Attacher {
+func (m *RuntimeManager) GetAttacher(image, authStr string,
+	lxcfsEnabled, registrySkipTLS bool,
+	command []string, context context.Context,
+	cancel context.CancelFunc) kubeletremote.Attacher {
 	var containerRuntime ContainerRuntime
 	if m.dockerClient != nil {
 		containerRuntime = &DockerContainerRuntime{
@@ -811,6 +916,7 @@ func (m *RuntimeManager) GetAttacher(image, authStr string, lxcfsEnabled bool, c
 		image:                image,
 		authStr:              authStr,
 		lxcfsEnabled:         lxcfsEnabled,
+		registrySkipTLS:      registrySkipTLS,
 		command:              command,
 		context:              context,
 		idOfContainerToDebug: m.idOfContainerToDebug,
