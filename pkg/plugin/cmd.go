@@ -83,6 +83,7 @@ You may set default configuration such as image and command in the config file, 
 
 	defaultRegistrySecretName      = "kubectl-debug-registry-secret"
 	defaultRegistrySecretNamespace = "default"
+	defaultRegistrySkipTLSVerify   = false
 
 	defaultPortForward = true
 	defaultAgentless   = true
@@ -101,6 +102,7 @@ type DebugOptions struct {
 	Image                   string
 	RegistrySecretName      string
 	RegistrySecretNamespace string
+	RegistrySkipTLSVerify   bool
 
 	ContainerName       string
 	Command             []string
@@ -190,6 +192,8 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		"private registry secret name, default is kubectl-debug-registry-secret")
 	cmd.Flags().StringVar(&opts.RegistrySecretNamespace, "registry-secret-namespace", "",
 		"private registry secret namespace, default is default")
+	cmd.Flags().BoolVar(&opts.RegistrySkipTLSVerify, "registry-skip-tls-verify", false,
+		"If true, the registry's certificate will not be checked for validity. This will make your HTTPS connections insecure")
 	cmd.Flags().StringSliceVar(&opts.ForkPodRetainLabels, "fork-pod-retain-labels", []string{},
 		"in fork mode the pod labels retain labels name list, default is not set")
 	cmd.Flags().StringVarP(&opts.ContainerName, "container", "c", "",
@@ -300,6 +304,13 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 			o.RegistrySecretNamespace = config.RegistrySecretNamespace
 		} else {
 			o.RegistrySecretNamespace = defaultRegistrySecretNamespace
+		}
+	}
+	if !o.RegistrySkipTLSVerify {
+		if config.RegistrySkipTLSVerify {
+			o.RegistrySkipTLSVerify = config.RegistrySkipTLSVerify
+		} else {
+			o.RegistrySkipTLSVerify = defaultRegistrySkipTLSVerify
 		}
 	}
 	if len(o.ForkPodRetainLabels) < 1 {
@@ -567,6 +578,11 @@ func (o *DebugOptions) Run() error {
 			params.Add("lxcfsEnabled", "true")
 		} else {
 			params.Add("lxcfsEnabled", "false")
+		}
+		if o.RegistrySkipTLSVerify {
+			params.Add("registrySkipTLS", "true")
+		} else {
+			params.Add("registrySkipTLS", "false")
 		}
 		var authStr string
 		registrySecret, err := o.CoreClient.Secrets(o.RegistrySecretNamespace).Get(o.RegistrySecretName, v1.GetOptions{})

@@ -95,6 +95,13 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 	} else if lxcfsEnabled == "true" {
 		LxcfsEnabled = true
 	}
+	var registrySkipTLS bool
+	registrySkipTLSParam := req.FormValue("registrySkipTLS")
+	if registrySkipTLSParam == "" || registrySkipTLSParam == "false" {
+		registrySkipTLS = false
+	} else if registrySkipTLSParam == "true" {
+		registrySkipTLS = true
+	}
 	sverbosity := req.FormValue("verbosity")
 	if sverbosity == "" {
 		sverbosity = "0"
@@ -126,7 +133,7 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 	kubeletremote.ServeAttach(
 		w,
 		req,
-		runtime.GetAttacher(image, authStr, LxcfsEnabled, commandSlice, context, cancel),
+		runtime.GetAttacher(image, authStr, LxcfsEnabled, registrySkipTLS, commandSlice, context, cancel),
 		"",
 		"",
 		"",
