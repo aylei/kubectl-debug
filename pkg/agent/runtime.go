@@ -663,10 +663,24 @@ func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
 		Type: specs.NetworkNamespace,
 		Path: GetNetworkNamespace(trgtInf.Pid),
 	}))
+	// 2020-04-21 d :
+	// Tried setting the user namespace without success.
+	// - If I just use WithLinuxNamespace and don't use WithUserNamespace
+	//   then I get the error "User namespaces enabled, but no uid mappings found.: unknown"
+	// - If I then add WithUserNamespace I instead get the error
+	//   "getting the final child's pid from pipe caused \"EOF\"": unknown"
+	//
+	// I examined one of our environments, checked available kubernetes settings it seems
+	// really all containers are sharing the host user namespace.   I then stumbled on this
+	// https://kubernetes.io/blog/2018/07/18/11-ways-not-to-get-hacked/
+	// article which claims that Kubernetes doesn't provide a way to set up separate user
+	// namespaces for containers.
+	// Consequently am just going to comment this out for now.
 	// spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
 	// 	Type: specs.UserNamespace,
 	// 	Path: GetUserNamespace(trgtInf.Pid),
 	// }))
+	// spcOpts = append(spcOpts, oci.WithUserNamespace(0, 0, 1024))
 	spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
 		Type: specs.IPCNamespace,
 		Path: GetIPCNamespace(trgtInf.Pid),
