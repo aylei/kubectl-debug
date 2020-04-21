@@ -649,22 +649,24 @@ func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
 	var spcOpts []oci.SpecOpts
 	spcOpts = append(spcOpts, oci.WithImageConfig(c.image))
 	spcOpts = append(spcOpts, oci.WithPrivileged)
-	spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
-		Type: specs.NetworkNamespace,
-		Path: GetNetworkNamespace(c.pid),
-	}))
-	spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
-		Type: specs.UserNamespace,
-		Path: GetUserNamespace(c.pid),
-	}))
-	spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
-		Type: specs.IPCNamespace,
-		Path: GetIPCNamespace(c.pid),
-	}))
-	spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
-		Type: specs.PIDNamespace,
-		Path: GetPIDNamespace(c.pid),
-	}))
+	spcOpts = append(spcOpts, oci.WithProcessArgs(cfg.command...))
+	spcOpts = append(spcOpts, oci.WithTTY) // see ctr run NewContainer
+	// spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
+	// 	Type: specs.NetworkNamespace,
+	// 	Path: GetNetworkNamespace(c.pid),
+	// }))
+	// spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
+	// 	Type: specs.UserNamespace,
+	// 	Path: GetUserNamespace(c.pid),
+	// }))
+	// spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
+	// 	Type: specs.IPCNamespace,
+	// 	Path: GetIPCNamespace(c.pid),
+	// }))
+	// spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
+	// 	Type: specs.PIDNamespace,
+	// 	Path: GetPIDNamespace(c.pid),
+	// }))
 	cntnr, err := c.client.NewContainer(
 		ctx,
 		"debug-"+cfg.idOfContainerToDebug,
@@ -672,29 +674,49 @@ func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
 		containerd.WithNewSnapshot("netshoot-snapshot", c.image), // Had hoped this would fix 2020/04/17 17:04:31 runtime.go:672: Failed to create container for debugging 3d4059893a086fc7c59991fde9835ac7e35b754cd017a300292af9c721a4e6b9 : rootfs absolute path is required but it did not
 		containerd.WithNewSpec(spcOpts...),
 	)
+	if cntnr != nil {
+		defer cntnr.Delete(ctx, containerd.WithSnapshotCleanup)
+	}
+
 	if err != nil {
 		log.Printf("Failed to create container for debugging %s\r\n",
 			cfg.idOfContainerToDebug)
 		return err
 	}
 
-	defer cntnr.Delete(ctx, containerd.WithSnapshotCleanup)
+	var stdIo cio.Opt
+	if cfg.stderr == nil {
+		// 2020-04-21 d : Otherwise create fails with
+		// E0421 14:16:36.797876   24356 attach.go:54] error attaching to container: failed to start io pipe copy: unable to copy pipes: containerd-shim: opening file "" failed: open : no such file or directory: unknown
+		stdIo = cio.WithStreams(cfg.stdin, cfg.stdout, cfg.stdout)
+	} else {
+		stdIo = cio.WithStreams(cfg.stdin, cfg.stdout, cfg.stderr)
+	}
 
 	tsk, err := cntnr.NewTask(ctx,
 		cio.NewCreator(
-			cio.WithStreams(cfg.stdin, cfg.stdout, cfg.stderr),
+			stdIo,
+			cio.WithTerminal,
 		))
+
+	if tsk != nil {
+		defer tsk.Delete(ctx)
+	}
+
 	if err != nil {
 		log.Printf("Failed to create task for debugging %s : %v\r\n",
 			cfg.idOfContainerToDebug, err)
 		return err
 	}
-	defer tsk.Delete(ctx)
 
 	exitStatusC, err := tsk.Wait(ctx)
 	if err != nil {
 		log.Printf("Failed to get exit channel for task for debugging %s : %v\r\n",
 			cfg.idOfContainerToDebug, err)
+		return err
+	}
+
+	if err := tsk.Start(ctx); err != nil {
 		return err
 	}
 
