@@ -290,9 +290,9 @@ func (c *DockerContainerRuntime) redirectResponseToOutputStream(cfg RunConfig, r
 }
 
 type ContainerdContainerRuntime struct {
-	client *containerd.Client
-	image  containerd.Image
-	pid    int64
+	client              *containerd.Client
+	image               containerd.Image
+	targetContainerInfo ContainerInfo
 }
 
 var ContainerdContainerRuntimeImplementsContainerRuntime ContainerRuntime = (*ContainerdContainerRuntime)(nil)
@@ -571,52 +571,54 @@ func (c *ContainerdContainerRuntime) PullImage(
 
 func (c *ContainerdContainerRuntime) ContainerInfo(
 	ctx context.Context, targetContainerId string) (ContainerInfo, error) {
-	ctx = namespaces.WithNamespace(ctx, K8NS)
-	cntnr, err := c.client.LoadContainer(ctx, targetContainerId)
-	if err != nil {
-		log.Printf("Failed to access target container %s : %v\r\n",
-			targetContainerId, err)
-
-		return ContainerInfo{}, err
-	}
-	tsk, err := cntnr.Task(ctx, nil)
-	if err != nil {
-		log.Printf("Failed to get task of target container %s : %v\r\n",
-			targetContainerId, err)
-
-		return ContainerInfo{}, err
-	}
-	pids, err := tsk.Pids(ctx)
-	if err != nil {
-		log.Printf("Failed to get pids of target container %s : %v\r\n",
-			targetContainerId, err)
-
-		return ContainerInfo{}, err
-	}
-
-	info, err := cntnr.Info(ctx, containerd.WithoutRefreshedMetadata)
-	if err != nil {
-		log.Printf("Failed to load target container info %s : %v\r\n",
-			targetContainerId, err)
-
-		return ContainerInfo{}, err
-	}
-
-	ret := ContainerInfo{Pid: int64(pids[0].Pid)}
-	if info.Spec != nil && info.Spec.Value != nil {
-		v, err := typeurl.UnmarshalAny(info.Spec)
+	if c.targetContainerInfo.Pid == 0 {
+		ctx = namespaces.WithNamespace(ctx, K8NS)
+		cntnr, err := c.client.LoadContainer(ctx, targetContainerId)
 		if err != nil {
-			log.Printf("Error unmarshalling spec for container %s : %v\r\n",
+			log.Printf("Failed to access target container %s : %v\r\n",
 				targetContainerId, err)
+
+			return ContainerInfo{}, err
 		}
-		for _, mnt := range v.(*specs.Spec).Mounts {
-			ret.MountDestinations = append(ret.MountDestinations, mnt.Destination)
-			fmt.Printf("%+v\r\n", mnt)
+		tsk, err := cntnr.Task(ctx, nil)
+		if err != nil {
+			log.Printf("Failed to get task of target container %s : %v\r\n",
+				targetContainerId, err)
+
+			return ContainerInfo{}, err
+		}
+		pids, err := tsk.Pids(ctx)
+		if err != nil {
+			log.Printf("Failed to get pids of target container %s : %v\r\n",
+				targetContainerId, err)
+
+			return ContainerInfo{}, err
+		}
+
+		info, err := cntnr.Info(ctx, containerd.WithoutRefreshedMetadata)
+		if err != nil {
+			log.Printf("Failed to load target container info %s : %v\r\n",
+				targetContainerId, err)
+
+			return ContainerInfo{}, err
+		}
+
+		log.Printf("Pids from target container: %+v\r\n", pids)
+		c.targetContainerInfo.Pid = int64(pids[0].Pid)
+		if info.Spec != nil && info.Spec.Value != nil {
+			v, err := typeurl.UnmarshalAny(info.Spec)
+			if err != nil {
+				log.Printf("Error unmarshalling spec for container %s : %v\r\n",
+					targetContainerId, err)
+			}
+			for _, mnt := range v.(*specs.Spec).Mounts {
+				c.targetContainerInfo.MountDestinations = append(
+					c.targetContainerInfo.MountDestinations, mnt.Destination)
+				fmt.Printf("%+v\r\n", mnt)
+			}
 		}
 	}
-
-	c.pid = ret.Pid
-	return ret, nil
+	return c.targetContainerInfo, nil
 }
 
 const (
@@ -650,23 +652,29 @@ func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
 	spcOpts = append(spcOpts, oci.WithImageConfig(c.image))
 	spcOpts = append(spcOpts, oci.WithPrivileged)
 	spcOpts = append(spcOpts, oci.WithProcessArgs(cfg.command...))
-	spcOpts = append(spcOpts, oci.WithTTY) // see ctr run NewContainer
-	// spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
-	// 	Type: specs.NetworkNamespace,
-	// 	Path: GetNetworkNamespace(c.pid),
-	// }))
+	spcOpts = append(spcOpts, oci.WithTTY)
+	trgtInf, err := c.ContainerInfo(ctx, cfg.idOfContainerToDebug)
+	if err != nil {
+		log.Printf("Failed to get a pid from target container %s : %v\r\n",
+			cfg.idOfContainerToDebug, err)
+		return err
+	}
+	spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
+		Type: specs.NetworkNamespace,
+		Path: GetNetworkNamespace(trgtInf.Pid),
+	}))
 	// spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
 	// 	Type: specs.UserNamespace,
-	// 	Path: GetUserNamespace(c.pid),
+	// 	Path: GetUserNamespace(trgtInf.Pid),
 	// }))
-	// spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
-	// 	Type: specs.IPCNamespace,
-	// 	Path: GetIPCNamespace(c.pid),
-	// }))
-	// spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
-	// 	Type: specs.PIDNamespace,
-	// 	Path: GetPIDNamespace(c.pid),
-	// }))
+	spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
+		Type: specs.IPCNamespace,
+		Path: GetIPCNamespace(trgtInf.Pid),
+	}))
+	spcOpts = append(spcOpts, oci.WithLinuxNamespace(specs.LinuxNamespace{
+		Type: specs.PIDNamespace,
+		Path: GetPIDNamespace(trgtInf.Pid),
+	}))
 	cntnr, err := c.client.NewContainer(
 		ctx,
 		"debug-"+cfg.idOfContainerToDebug,
