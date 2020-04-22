@@ -17,4 +17,9 @@ cp -f /usr/lib/lxcfs/liblxcfs.so /usr/local/lib/lxcfs/liblxcfs.so
 # Mount
 exec /usr/bin/nsenter -m/proc/1/ns/mnt /usr/local/bin/lxcfs /var/lib/lxc/lxcfs/ &
 
+if grep -q io.containerd.runtime.v1.linux /proc/$PPID/cmdline 
+then
+  export KCTLDBG_CONTAINERDV1_SHIM=io.containerd.runc.v1
+fi   
+
 /bin/debug-agent

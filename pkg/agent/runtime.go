@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"text/tabwriter"
@@ -47,7 +48,7 @@ type ContainerRuntimeScheme string
 const (
 	DockerScheme     ContainerRuntimeScheme = "docker"
 	ContainerdScheme ContainerRuntimeScheme = "containerd"
-	KubectlDebugNS   string                 = "kubectl-debug"
+	KubectlDebugNS   string                 = "kctldbg"
 	K8NS             string                 = "k8s.io"
 )
 
@@ -691,7 +692,7 @@ func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
 	}))
 	cntnr, err := c.client.NewContainer(
 		ctx,
-		"debug-"+cfg.idOfContainerToDebug,
+		"dbg-"+cfg.idOfContainerToDebug,
 		containerd.WithImage(c.image),
 		containerd.WithNewSnapshot("netshoot-snapshot", c.image), // Had hoped this would fix 2020/04/17 17:04:31 runtime.go:672: Failed to create container for debugging 3d4059893a086fc7c59991fde9835ac7e35b754cd017a300292af9c721a4e6b9 : rootfs absolute path is required but it did not
 		containerd.WithNewSpec(spcOpts...),
@@ -917,7 +918,14 @@ func NewRuntimeManager(srvCfg Config, containerUri string, verbosity int) (*Runt
 	case ContainerdScheme:
 		{
 			var err error
-			containerdClient, err = containerd.New(srvCfg.ContainerdEndpoint)
+			var clntOpts []containerd.ClientOpt
+			if os.Getenv("KCTLDBG_CONTAINERDV1_SHIM") != "" {
+				log.Println("Using containerd v1 runtime")
+				clntOpts = append(clntOpts,
+					containerd.WithDefaultRuntime("io.containerd.runc.v1"))
+			}
+			containerdClient, err = containerd.New(srvCfg.ContainerdEndpoint,
+				clntOpts...)
 			if err != nil {
 				return nil, err
 			}
