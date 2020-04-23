@@ -291,9 +291,8 @@ func (c *DockerContainerRuntime) redirectResponseToOutputStream(cfg RunConfig, r
 }
 
 type ContainerdContainerRuntime struct {
-	client              *containerd.Client
-	image               containerd.Image
-	targetContainerInfo ContainerInfo
+	client *containerd.Client
+	image  containerd.Image
 }
 
 var ContainerdContainerRuntimeImplementsContainerRuntime ContainerRuntime = (*ContainerdContainerRuntime)(nil)
@@ -572,54 +571,53 @@ func (c *ContainerdContainerRuntime) PullImage(
 
 func (c *ContainerdContainerRuntime) ContainerInfo(
 	ctx context.Context, targetContainerId string) (ContainerInfo, error) {
-	if c.targetContainerInfo.Pid == 0 {
-		ctx = namespaces.WithNamespace(ctx, K8NS)
-		cntnr, err := c.client.LoadContainer(ctx, targetContainerId)
+	var ret ContainerInfo
+	ctx = namespaces.WithNamespace(ctx, K8NS)
+	cntnr, err := c.client.LoadContainer(ctx, targetContainerId)
+	if err != nil {
+		log.Printf("Failed to access target container %s : %v\r\n",
+			targetContainerId, err)
+
+		return ContainerInfo{}, err
+	}
+	tsk, err := cntnr.Task(ctx, nil)
+	if err != nil {
+		log.Printf("Failed to get task of target container %s : %v\r\n",
+			targetContainerId, err)
+
+		return ContainerInfo{}, err
+	}
+	pids, err := tsk.Pids(ctx)
+	if err != nil {
+		log.Printf("Failed to get pids of target container %s : %v\r\n",
+			targetContainerId, err)
+
+		return ContainerInfo{}, err
+	}
+
+	info, err := cntnr.Info(ctx, containerd.WithoutRefreshedMetadata)
+	if err != nil {
+		log.Printf("Failed to load target container info %s : %v\r\n",
+			targetContainerId, err)
+
+		return ContainerInfo{}, err
+	}
+
+	log.Printf("Pids from target container: %+v\r\n", pids)
+	ret.Pid = int64(pids[0].Pid)
+	if info.Spec != nil && info.Spec.Value != nil {
+		v, err := typeurl.UnmarshalAny(info.Spec)
 		if err != nil {
-			log.Printf("Failed to access target container %s : %v\r\n",
+			log.Printf("Error unmarshalling spec for container %s : %v\r\n",
 				targetContainerId, err)
-
-			return ContainerInfo{}, err
 		}
-		tsk, err := cntnr.Task(ctx, nil)
-		if err != nil {
-			log.Printf("Failed to get task of target container %s : %v\r\n",
-				targetContainerId, err)
-
-			return ContainerInfo{}, err
-		}
-		pids, err := tsk.Pids(ctx)
-		if err != nil {
-			log.Printf("Failed to get pids of target container %s : %v\r\n",
-				targetContainerId, err)
-
-			return ContainerInfo{}, err
-		}
-
-		info, err := cntnr.Info(ctx, containerd.WithoutRefreshedMetadata)
-		if err != nil {
-			log.Printf("Failed to load target container info %s : %v\r\n",
-				targetContainerId, err)
-
-			return ContainerInfo{}, err
-		}
-
-		log.Printf("Pids from target container: %+v\r\n", pids)
-		c.targetContainerInfo.Pid = int64(pids[0].Pid)
-		if info.Spec != nil && info.Spec.Value != nil {
-			v, err := typeurl.UnmarshalAny(info.Spec)
-			if err != nil {
-				log.Printf("Error unmarshalling spec for container %s : %v\r\n",
-					targetContainerId, err)
-			}
-			for _, mnt := range v.(*specs.Spec).Mounts {
-				c.targetContainerInfo.MountDestinations = append(
-					c.targetContainerInfo.MountDestinations, mnt.Destination)
-				fmt.Printf("%+v\r\n", mnt)
-			}
+		for _, mnt := range v.(*specs.Spec).Mounts {
+			ret.MountDestinations = append(
+				ret.MountDestinations, mnt.Destination)
+			fmt.Printf("%+v\r\n", mnt)
 		}
 	}
-	return c.targetContainerInfo, nil
+	return ret, nil
 }
 
 const (
