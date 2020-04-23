@@ -697,13 +697,23 @@ func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
 		containerd.WithNewSnapshot("netshoot-snapshot", c.image), // Had hoped this would fix 2020/04/17 17:04:31 runtime.go:672: Failed to create container for debugging 3d4059893a086fc7c59991fde9835ac7e35b754cd017a300292af9c721a4e6b9 : rootfs absolute path is required but it did not
 		containerd.WithNewSpec(spcOpts...),
 	)
+
 	if cntnr != nil {
-		defer cntnr.Delete(ctx, containerd.WithSnapshotCleanup)
+		defer func() {
+			cdctx, ccancel := context.WithTimeout(context.Background(), cfg.timeout)
+			defer ccancel()
+			cdctx = namespaces.WithNamespace(cdctx, KubectlDebugNS)
+			cderr := cntnr.Delete(cdctx, containerd.WithSnapshotCleanup)
+			if cderr != nil {
+				log.Printf("Failed to delete container for debugging %s : %v\r\n",
+					cfg.idOfContainerToDebug, cderr)
+			}
+		}()
 	}
 
 	if err != nil {
-		log.Printf("Failed to create container for debugging %s\r\n",
-			cfg.idOfContainerToDebug)
+		log.Printf("Failed to create container for debugging %s : %v\r\n",
+			cfg.idOfContainerToDebug, err)
 		return err
 	}
 
@@ -723,7 +733,16 @@ func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
 		))
 
 	if tsk != nil {
-		defer tsk.Delete(ctx)
+		defer func() {
+			tdctx, tcancel := context.WithTimeout(context.Background(), cfg.timeout)
+			defer tcancel()
+			tdctx = namespaces.WithNamespace(tdctx, KubectlDebugNS)
+			_, tderr := tsk.Delete(tdctx, containerd.WithProcessKill)
+			if tderr != nil {
+				log.Printf("Failed to delete task for debugging %s  : %v\r\n",
+					cfg.idOfContainerToDebug, tderr)
+			}
+		}()
 	}
 
 	if err != nil {
