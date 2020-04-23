@@ -834,10 +834,41 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 							Name:      "cgroup",
 							MountPath: "/sys/fs/cgroup",
 						},
+						// containerd client will need to access /var/data, /run/containerd and /run/runc
+						{
+							Name:      "vardata",
+							MountPath: "/var/data",
+						},
+						{
+							Name:      "runcontainerd",
+							MountPath: "/run/containerd",
+						},
+						{
+							Name:      "runrunc",
+							MountPath: "/run/runc",
+						},
 						{
 							Name:             "lxcfs",
 							MountPath:        "/var/lib/lxc/lxcfs",
 							MountPropagation: &prop,
+						},
+						// Make ctr available in the agent container.  Can be handy for cleaning up
+						// orphaned debug containers.
+						{
+							Name:      "ctr",
+							MountPath: "/usr/local/bin/ctr",
+						},
+						{
+							Name:      "libdl",
+							MountPath: "/lib/x86_64-linux-gnu/libdl.so.2",
+						},
+						{
+							Name:      "libc",
+							MountPath: "/lib/x86_64-linux-gnu/libc.so.6",
+						},
+						{
+							Name:      "libpthread",
+							MountPath: "/lib/x86_64-linux-gnu/libpthread.so.0",
 						},
 					},
 					Ports: []corev1.ContainerPort{
@@ -872,6 +903,62 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 						HostPath: &corev1.HostPathVolumeSource{
 							Path: "/var/lib/lxc/lxcfs",
 							Type: &directoryCreate,
+						},
+					},
+				},
+				{
+					Name: "vardata",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: "/var/data",
+						},
+					},
+				},
+				{
+					Name: "runcontainerd",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: "/run/containerd",
+						},
+					},
+				},
+				{
+					Name: "runrunc",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: "/run/runc",
+						},
+					},
+				},
+				{
+					Name: "ctr",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: "/usr/local/bin/ctr",
+						},
+					},
+				},
+				{
+					Name: "libdl",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: "/lib/x86_64-linux-gnu/libdl.so.2",
+						},
+					},
+				},
+				{
+					Name: "libc",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: "/lib/x86_64-linux-gnu/libc.so.6",
+						},
+					},
+				},
+				{
+					Name: "libpthread",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: "/lib/x86_64-linux-gnu/libpthread.so.0",
 						},
 					},
 				},
