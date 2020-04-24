@@ -986,7 +986,12 @@ func (o *DebugOptions) runPortForward(pod *corev1.Pod) error {
 			Namespace(pod.Namespace).
 			Name(pod.Name).
 			SubResource("portforward")
-		o.PortForwarder.ForwardPorts("POST", req.URL(), o)
+		err := o.PortForwarder.ForwardPorts("POST", req.URL(), o)
+		if err != nil {
+			log.Printf("PortForwarded failed with %+v\r\n", err)
+			log.Printf("Sending ready signal just in case the failure reason is that the port is already forwarded.\r\n")
+			o.ReadyChannel <- struct{}{}
+		}
 		fmt.Fprintln(o.Out, "end port-forward...")
 	}()
 	return nil

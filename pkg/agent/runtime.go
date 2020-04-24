@@ -691,24 +691,25 @@ func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
 		Type: specs.PIDNamespace,
 		Path: GetPIDNamespace(trgtInf.Pid),
 	}))
+	uuid := uuid.New().String()
 	cntnr, err := c.client.NewContainer(
 		ctx,
 		// Was using "dbg-[idOfContainerToDebug]" but this meant that you couldn't use multiple debug containers for the same debugee
 		// e.g. You couldn't have 1 running tcpdump and another one generating traffic.
-		uuid.New().String(),
+		uuid,
 		containerd.WithImage(c.image),
-		containerd.WithNewSnapshot("netshoot-snapshot", c.image), // Had hoped this would fix 2020/04/17 17:04:31 runtime.go:672: Failed to create container for debugging 3d4059893a086fc7c59991fde9835ac7e35b754cd017a300292af9c721a4e6b9 : rootfs absolute path is required but it did not
+		containerd.WithNewSnapshot("netshoot-snapshot-"+uuid, c.image), // Had hoped this would fix 2020/04/17 17:04:31 runtime.go:672: Failed to create container for debugging 3d4059893a086fc7c59991fde9835ac7e35b754cd017a300292af9c721a4e6b9 : rootfs absolute path is required but it did not
 		containerd.WithNewSpec(spcOpts...),
 	)
 
-	// Label the container so we have some idea of who created it and why
-	lbls := make(map[string]string)
-	lbls["ClientHostName"] = cfg.clientHostName
-	lbls["ClientUserName"] = cfg.clientUserName
-	lbls["IdOfDebuggee"] = cfg.idOfContainerToDebug
-	cntnr.SetLabels(ctx, lbls)
-
 	if cntnr != nil {
+		// Label the container so we have some idea of who created it and why
+		lbls := make(map[string]string)
+		lbls["ClientHostName"] = cfg.clientHostName
+		lbls["ClientUserName"] = cfg.clientUserName
+		lbls["IdOfDebuggee"] = cfg.idOfContainerToDebug
+		cntnr.SetLabels(ctx, lbls)
+
 		defer func() {
 			cdctx, ccancel := context.WithTimeout(context.Background(), cfg.timeout)
 			defer ccancel()
