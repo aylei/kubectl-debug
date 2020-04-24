@@ -769,6 +769,11 @@ func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
 		return err
 	}
 
+	HandleResizing(cfg.resize, func(size remotecommand.TerminalSize) {
+		c.resizeContainerTTY(ctx, cfg.idOfContainerToDebug, tsk, size.Height,
+			size.Width)
+	})
+
 	if err := tsk.Start(ctx); err != nil {
 		return err
 	}
@@ -781,6 +786,16 @@ func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
 		return err
 	}
 
+	return nil
+}
+
+func (c *ContainerdContainerRuntime) resizeContainerTTY(ctx context.Context,
+	trgtId string, tsk containerd.Task, height, width uint16) error {
+	err := tsk.Resize(ctx, uint32(width), uint32(height))
+	if err != nil {
+		log.Printf("Failed to resize debugger task %+v for debuggee %+v : %+v\r\n",
+			tsk.Pid(), trgtId, err)
+	}
 	return nil
 }
 

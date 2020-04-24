@@ -17,6 +17,8 @@ limitations under the License.
 package agent
 
 import (
+	"log"
+
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/remotecommand"
 )
@@ -26,6 +28,7 @@ import (
 // goroutine.
 func HandleResizing(resize <-chan remotecommand.TerminalSize, resizeFunc func(size remotecommand.TerminalSize)) {
 	if resize == nil {
+		log.Println("Resize channel is nil")
 		return
 	}
 
