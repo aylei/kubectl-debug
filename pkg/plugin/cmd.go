@@ -574,6 +574,10 @@ func (o *DebugOptions) Run() error {
 		params.Add("image", o.Image)
 		params.Add("container", containerID)
 		params.Add("verbosity", fmt.Sprintf("%v", o.Verbosity))
+		hstNm, _ := os.Hostname()
+		params.Add("hostname", hstNm)
+		usr, _ := user.Current()
+		params.Add("username", usr.Username)
 		if o.IsLxcfsEnabled {
 			params.Add("lxcfsEnabled", "true")
 		} else {

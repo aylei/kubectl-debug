@@ -112,7 +112,10 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 	defer cancel()
 
 	// 2020-04-09 d : TODO Need to touch this in order to support containerd
-	runtime, err := NewRuntimeManager(*s.config, containerUri, maxInt(iverbosity, s.config.Verbosity))
+	runtime, err := NewRuntimeManager(*s.config, containerUri,
+		maxInt(iverbosity, s.config.Verbosity),
+		req.FormValue("hostname"),
+		req.FormValue("username"))
 	if err != nil {
 		msg := fmt.Sprintf("Failed to construct RuntimeManager.  Error: %s", err.Error())
 		log.Println(msg)
@@ -133,7 +136,8 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 	kubeletremote.ServeAttach(
 		w,
 		req,
-		runtime.GetAttacher(image, authStr, LxcfsEnabled, registrySkipTLS, commandSlice, context, cancel),
+		runtime.GetAttacher(image, authStr, LxcfsEnabled, registrySkipTLS,
+			commandSlice, context, cancel),
 		"",
 		"",
 		"",

@@ -35,6 +35,7 @@ import (
 	"github.com/docker/docker/api/types/strslice"
 	dockerclient "github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/google/uuid"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -68,6 +69,8 @@ type RunConfig struct {
 	stderr               io.WriteCloser
 	tty                  bool
 	resize               <-chan remotecommand.TerminalSize
+	clientHostName       string
+	clientUserName       string
 }
 
 func (c *RunConfig) getContextWithTimeout() (context.Context, context.CancelFunc) {
@@ -690,11 +693,20 @@ func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
 	}))
 	cntnr, err := c.client.NewContainer(
 		ctx,
-		"dbg-"+cfg.idOfContainerToDebug,
+		// Was using "dbg-[idOfContainerToDebug]" but this meant that you couldn't use multiple debug containers for the same debugee
+		// e.g. You couldn't have 1 running tcpdump and another one generating traffic.
+		uuid.New().String(),
 		containerd.WithImage(c.image),
 		containerd.WithNewSnapshot("netshoot-snapshot", c.image), // Had hoped this would fix 2020/04/17 17:04:31 runtime.go:672: Failed to create container for debugging 3d4059893a086fc7c59991fde9835ac7e35b754cd017a300292af9c721a4e6b9 : rootfs absolute path is required but it did not
 		containerd.WithNewSpec(spcOpts...),
 	)
+
+	// Label the container so we have some idea of who created it and why
+	lbls := make(map[string]string)
+	lbls["ClientHostName"] = cfg.clientHostName
+	lbls["ClientUserName"] = cfg.clientUserName
+	lbls["IdOfDebuggee"] = cfg.idOfContainerToDebug
+	cntnr.SetLabels(ctx, lbls)
 
 	if cntnr != nil {
 		defer func() {
@@ -783,6 +795,8 @@ type DebugAttacher struct {
 	timeout              time.Duration
 	idOfContainerToDebug string
 	verbosity            int
+	clientHostName       string
+	clientUserName       string
 
 	// control the preparing of debug container
 	stopListenEOF chan struct{}
@@ -809,6 +823,8 @@ func (a *DebugAttacher) AttachContainer(name string, uid kubetype.UID, container
 		stderr:               err,
 		tty:                  tty,
 		resize:               resize,
+		clientHostName:       a.clientHostName,
+		clientUserName:       a.clientUserName,
 	})
 }
 
@@ -905,9 +921,12 @@ type RuntimeManager struct {
 	verbosity            int
 	idOfContainerToDebug string
 	containerScheme      ContainerRuntimeScheme
+	clientHostName       string
+	clientUserName       string
 }
 
-func NewRuntimeManager(srvCfg Config, containerUri string, verbosity int) (*RuntimeManager, error) {
+func NewRuntimeManager(srvCfg Config, containerUri string, verbosity int,
+	hstNm, usrNm string) (*RuntimeManager, error) {
 	if len(containerUri) < 1 {
 		return nil, errors.New("target container id must be provided")
 	}
@@ -962,6 +981,8 @@ func NewRuntimeManager(srvCfg Config, containerUri string, verbosity int) (*Runt
 		verbosity:            verbosity,
 		idOfContainerToDebug: idOfContainerToDebug,
 		containerScheme:      containerScheme,
+		clientHostName:       hstNm,
+		clientUserName:       usrNm,
 	}, nil
 }
 
@@ -993,5 +1014,7 @@ func (m *RuntimeManager) GetAttacher(image, authStr string,
 		timeout:              m.timeout,
 		cancel:               cancel,
 		stopListenEOF:        make(chan struct{}),
+		clientHostName:       m.clientHostName,
+		clientUserName:       m.clientUserName,
 	}
 }
