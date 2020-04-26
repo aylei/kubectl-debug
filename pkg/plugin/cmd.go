@@ -543,7 +543,9 @@ func (o *DebugOptions) Run() error {
 		if agent == nil {
 			return fmt.Errorf("there is no agent pod in the same node with your speficy pod %s", o.PodName)
 		}
-		fmt.Fprintf(o.Out, "pod %s PodIP %s, agentPodIP %s\n", o.PodName, pod.Status.PodIP, agent.Status.HostIP)
+		if o.Verbosity > 0 {
+			fmt.Fprintf(o.Out, "pod %s PodIP %s, agentPodIP %s\n", o.PodName, pod.Status.PodIP, agent.Status.HostIP)
+		}
 		err = o.runPortForward(agent)
 		if err != nil {
 			o.deleteAgent(agentPod)
@@ -553,7 +555,9 @@ func (o *DebugOptions) Run() error {
 		// than we use forward ports to connect the specified pod and that will listen
 		// on specified ports in localhost, the ports can not access until receive the
 		// ready signal
-		fmt.Fprintln(o.Out, "wait for forward port to debug agent ready...")
+		if o.Verbosity > 0 {
+			fmt.Fprintln(o.Out, "wait for forward port to debug agent ready...")
+		}
 		<-o.ReadyChannel
 	}
 
@@ -992,7 +996,9 @@ func (o *DebugOptions) runPortForward(pod *corev1.Pod) error {
 			log.Printf("Sending ready signal just in case the failure reason is that the port is already forwarded.\r\n")
 			o.ReadyChannel <- struct{}{}
 		}
-		fmt.Fprintln(o.Out, "end port-forward...")
+		if o.Verbosity > 0 {
+			fmt.Fprintln(o.Out, "end port-forward...")
+		}
 	}()
 	return nil
 }

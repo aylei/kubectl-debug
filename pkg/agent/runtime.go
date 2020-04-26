@@ -885,7 +885,9 @@ func (m *DebugAttacher) DebugContainer(cfg RunConfig) error {
 	//	}
 	//} ()
 	// step 0: set container procfs correct by lxcfs
-	cfg.stdout.Write([]byte(fmt.Sprintf("set container procfs correct %t .. \n\r", m.lxcfsEnabled)))
+	if cfg.verbosity > 0 {
+		cfg.stdout.Write([]byte(fmt.Sprintf("set container procfs correct %t .. \n\r", m.lxcfsEnabled)))
+	}
 	if m.lxcfsEnabled {
 		if err := CheckLxcfsMount(); err != nil {
 			return err
@@ -897,15 +899,23 @@ func (m *DebugAttacher) DebugContainer(cfg RunConfig) error {
 	}
 
 	// step 1: pull image
-	cfg.stdout.Write([]byte(fmt.Sprintf("pulling image %s, skip TLS %v... \n\r", m.image, m.registrySkipTLS)))
+	if cfg.verbosity > 0 {
+		cfg.stdout.Write([]byte(fmt.Sprintf("pulling image %s, skip TLS %v... \n\r", m.image, m.registrySkipTLS)))
+	}
+	ioForPull := cfg.stdout
+	if cfg.verbosity < 1 {
+		ioForPull = nil
+	}
 	err := m.containerRuntime.PullImage(m.context, m.image,
-		m.registrySkipTLS, m.authStr, cfg.stdout)
+		m.registrySkipTLS, m.authStr, ioForPull)
 	if err != nil {
 		return err
 	}
 
 	// step 2: run debug container (join the namespaces of target container)
-	cfg.stdout.Write([]byte("starting debug container...\n\r"))
+	if cfg.verbosity > 0 {
+		cfg.stdout.Write([]byte("starting debug container...\n\r"))
+	}
 	return m.containerRuntime.RunDebugContainer(cfg)
 }
 
