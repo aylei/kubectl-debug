@@ -17,8 +17,6 @@ limitations under the License.
 package agent
 
 import (
-	"log"
-
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/remotecommand"
 )
@@ -27,11 +25,6 @@ import (
 // remotecommand.TerminalSize received from the channel. The resize channel must be closed elsewhere to stop the
 // goroutine.
 func HandleResizing(resize <-chan remotecommand.TerminalSize, resizeFunc func(size remotecommand.TerminalSize)) {
-	if resize == nil {
-		log.Println("Resize channel is nil")
-		return
-	}
-
 	go func() {
 		defer runtime.HandleCrash()
 

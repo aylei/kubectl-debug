@@ -826,6 +826,10 @@ var DebugAttacherImplementsAttacher kubeletremote.Attacher = (*DebugAttacher)(ni
 func (a *DebugAttacher) AttachContainer(name string, uid kubetype.UID, container string, in io.Reader, out, err io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error {
 	if a.verbosity > 0 {
 		log.Println("Enter")
+
+		if resize == nil {
+			log.Println("Resize channel is nil")
+		}
 	}
 
 	return a.DebugContainer(RunConfig{
@@ -955,7 +959,6 @@ func NewRuntimeManager(srvCfg Config, containerUri string, verbosity int,
 	containerScheme := ContainerRuntimeScheme(containerUriParts[0])
 	idOfContainerToDebug := containerUriParts[1]
 
-	// 2020-04-09 d : TODO Need to touch this in order to support containerd
 	var dockerClient *dockerclient.Client
 	var containerdClient *containerd.Client
 	switch containerScheme {
