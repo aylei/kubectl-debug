@@ -7,13 +7,13 @@ set -x
         sed -i "/^lxcfs \/var\/lib\/lxc\/lxcfs fuse.lxcfs/d" /etc/mtab
 
 # Prepare
-mkdir -p /var/lib/lxc/lxcfs
+/usr/bin/nsenter -m/proc/1/ns/mnt -- mkdir -p /var/lib/lxc/lxcfs
 
 # Mount
 LXCFS_USR=/usr/bin/lxcfs
 LXCFS=/usr/local/bin/lxcfs
 /usr/bin/nsenter -m/proc/1/ns/mnt -- [ -f $LXCFS_USR ] && LXCFS=$LXCFS_USR
-exec /usr/bin/nsenter -m/proc/1/ns/mnt $LXCFS -p "/run/lxcfs-$$.pid" /var/lib/lxc/lxcfs/ &
+exec /usr/bin/nsenter -m/proc/1/ns/mnt -- $LXCFS -p "/run/lxcfs-$$.pid" /var/lib/lxc/lxcfs/ &
 
 if grep -q io.containerd.runtime.v1.linux /proc/$PPID/cmdline 
 then
