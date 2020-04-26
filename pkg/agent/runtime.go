@@ -71,6 +71,7 @@ type RunConfig struct {
 	resize               <-chan remotecommand.TerminalSize
 	clientHostName       string
 	clientUserName       string
+	verbosity            int
 }
 
 func (c *RunConfig) getContextWithTimeout() (context.Context, context.CancelFunc) {
@@ -81,7 +82,7 @@ type ContainerRuntime interface {
 	PullImage(ctx context.Context, image string,
 		skipTLS bool, authStr string,
 		stdout io.WriteCloser) error
-	ContainerInfo(ctx context.Context, targetContainerId string) (ContainerInfo, error)
+	ContainerInfo(ctx context.Context, cfg RunConfig) (ContainerInfo, error)
 	RunDebugContainer(cfg RunConfig) error
 }
 
@@ -105,9 +106,9 @@ func (c *DockerContainerRuntime) PullImage(ctx context.Context,
 	return nil
 }
 
-func (c *DockerContainerRuntime) ContainerInfo(ctx context.Context, targetContainerId string) (ContainerInfo, error) {
+func (c *DockerContainerRuntime) ContainerInfo(ctx context.Context, cfg RunConfig) (ContainerInfo, error) {
 	var ret ContainerInfo
-	cntnr, err := c.client.ContainerInspect(ctx, targetContainerId)
+	cntnr, err := c.client.ContainerInspect(ctx, cfg.idOfContainerToDebug)
 	if err != nil {
 		return ContainerInfo{}, err
 	}
@@ -198,7 +199,7 @@ func (c *DockerContainerRuntime) CleanContainer(cfg RunConfig, id string) {
 	}
 	if rmErr != nil {
 		log.Printf("error remove container: %s \n", id)
-	} else {
+	} else if cfg.verbosity > 0 {
 		log.Printf("Debug session end, debug container %s removed", id)
 	}
 }
@@ -573,27 +574,27 @@ func (c *ContainerdContainerRuntime) PullImage(
 }
 
 func (c *ContainerdContainerRuntime) ContainerInfo(
-	ctx context.Context, targetContainerId string) (ContainerInfo, error) {
+	ctx context.Context, cfg RunConfig) (ContainerInfo, error) {
 	var ret ContainerInfo
 	ctx = namespaces.WithNamespace(ctx, K8NS)
-	cntnr, err := c.client.LoadContainer(ctx, targetContainerId)
+	cntnr, err := c.client.LoadContainer(ctx, cfg.idOfContainerToDebug)
 	if err != nil {
 		log.Printf("Failed to access target container %s : %v\r\n",
-			targetContainerId, err)
+			cfg.idOfContainerToDebug, err)
 
 		return ContainerInfo{}, err
 	}
 	tsk, err := cntnr.Task(ctx, nil)
 	if err != nil {
 		log.Printf("Failed to get task of target container %s : %v\r\n",
-			targetContainerId, err)
+			cfg.idOfContainerToDebug, err)
 
 		return ContainerInfo{}, err
 	}
 	pids, err := tsk.Pids(ctx)
 	if err != nil {
 		log.Printf("Failed to get pids of target container %s : %v\r\n",
-			targetContainerId, err)
+			cfg.idOfContainerToDebug, err)
 
 		return ContainerInfo{}, err
 	}
@@ -601,18 +602,20 @@ func (c *ContainerdContainerRuntime) ContainerInfo(
 	info, err := cntnr.Info(ctx, containerd.WithoutRefreshedMetadata)
 	if err != nil {
 		log.Printf("Failed to load target container info %s : %v\r\n",
-			targetContainerId, err)
+			cfg.idOfContainerToDebug, err)
 
 		return ContainerInfo{}, err
 	}
 
-	log.Printf("Pids from target container: %+v\r\n", pids)
+	if cfg.verbosity > 0 {
+		log.Printf("Pids from target container: %+v\r\n", pids)
+	}
 	ret.Pid = int64(pids[0].Pid)
 	if info.Spec != nil && info.Spec.Value != nil {
 		v, err := typeurl.UnmarshalAny(info.Spec)
 		if err != nil {
 			log.Printf("Error unmarshalling spec for container %s : %v\r\n",
-				targetContainerId, err)
+				cfg.idOfContainerToDebug, err)
 		}
 		for _, mnt := range v.(*specs.Spec).Mounts {
 			ret.MountDestinations = append(
@@ -655,7 +658,7 @@ func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
 	spcOpts = append(spcOpts, oci.WithPrivileged)
 	spcOpts = append(spcOpts, oci.WithProcessArgs(cfg.command...))
 	spcOpts = append(spcOpts, oci.WithTTY)
-	trgtInf, err := c.ContainerInfo(ctx, cfg.idOfContainerToDebug)
+	trgtInf, err := c.ContainerInfo(ctx, cfg)
 	if err != nil {
 		log.Printf("Failed to get a pid from target container %s : %v\r\n",
 			cfg.idOfContainerToDebug, err)
@@ -845,6 +848,7 @@ func (a *DebugAttacher) AttachContainer(name string, uid kubetype.UID, container
 		resize:               resize,
 		clientHostName:       a.clientHostName,
 		clientUserName:       a.clientUserName,
+		verbosity:            a.verbosity,
 	})
 }
 
@@ -852,9 +856,8 @@ func (a *DebugAttacher) AttachContainer(name string, uid kubetype.UID, container
 func (m *DebugAttacher) DebugContainer(cfg RunConfig) error {
 
 	if m.verbosity > 0 {
-		log.Println("Enter")
+		log.Printf("Accept new debug request:\n\t target container: %s \n\t image: %s \n\t command: %v \n", m.idOfContainerToDebug, m.image, m.command)
 	}
-	log.Printf("Accept new debug request:\n\t target container: %s \n\t image: %s \n\t command: %v \n", m.idOfContainerToDebug, m.image, m.command)
 
 	// the following steps may takes much time,
 	// so we listen to EOF from stdin
@@ -909,13 +912,15 @@ func (m *DebugAttacher) DebugContainer(cfg RunConfig) error {
 func (m *DebugAttacher) SetContainerLxcfs(cfg RunConfig) error {
 	ctx, cancel := cfg.getContextWithTimeout()
 	defer cancel()
-	cntnrInf, err := m.containerRuntime.ContainerInfo(ctx, m.idOfContainerToDebug)
+	cntnrInf, err := m.containerRuntime.ContainerInfo(ctx, cfg)
 	if err != nil {
 		return err
 	}
 	for _, mntDst := range cntnrInf.MountDestinations {
 		if mntDst == LxcfsRootDir {
-			log.Printf("remount lxcfs when the rootdir of lxcfs of target container has been mounted. \n\t ")
+			if cfg.verbosity > 0 {
+				log.Printf("remount lxcfs when the rootdir of lxcfs of target container has been mounted. \n\t ")
+			}
 			for _, procfile := range LxcfsProcFiles {
 				nsenter := &nsenter.MountNSEnter{
 					Target:     cntnrInf.Pid,
@@ -953,7 +958,9 @@ func NewRuntimeManager(srvCfg Config, containerUri string, verbosity int,
 	containerUriParts := strings.SplitN(containerUri, "://", 2)
 	if len(containerUriParts) != 2 {
 		msg := fmt.Sprintf("target container id must have form scheme:id but was %v", containerUri)
-		log.Println(msg)
+		if verbosity > 0 {
+			log.Println(msg)
+		}
 		return nil, errors.New(msg)
 	}
 	containerScheme := ContainerRuntimeScheme(containerUriParts[0])
@@ -975,7 +982,9 @@ func NewRuntimeManager(srvCfg Config, containerUri string, verbosity int,
 			var err error
 			var clntOpts []containerd.ClientOpt
 			if os.Getenv("KCTLDBG_CONTAINERDV1_SHIM") != "" {
-				log.Println("Using containerd v1 runtime")
+				if verbosity > 0 {
+					log.Println("Using containerd v1 runtime")
+				}
 				clntOpts = append(clntOpts,
 					containerd.WithDefaultRuntime("io.containerd.runc.v1"))
 			}
