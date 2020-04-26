@@ -111,7 +111,6 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 	context, cancel := context.WithCancel(req.Context())
 	defer cancel()
 
-	// 2020-04-09 d : TODO Need to touch this in order to support containerd
 	runtime, err := NewRuntimeManager(*s.config, containerUri,
 		maxInt(iverbosity, s.config.Verbosity),
 		req.FormValue("hostname"),
