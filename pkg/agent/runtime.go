@@ -651,6 +651,8 @@ func GetPIDNamespace(pid int64) string {
 }
 
 func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
+	defer c.client.Close()
+
 	ctx := namespaces.WithNamespace(cfg.context, KubectlDebugNS)
 
 	var spcOpts []oci.SpecOpts
