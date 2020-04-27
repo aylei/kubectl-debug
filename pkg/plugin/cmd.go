@@ -860,24 +860,6 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 							MountPath:        "/var/lib/lxc",
 							MountPropagation: &prop,
 						},
-						// Make ctr available in the agent container.  Can be handy for cleaning up
-						// orphaned debug containers.
-						{
-							Name:      "ctr",
-							MountPath: "/usr/local/bin/ctr",
-						},
-						{
-							Name:      "libdl",
-							MountPath: "/lib/x86_64-linux-gnu/libdl.so.2",
-						},
-						{
-							Name:      "libc",
-							MountPath: "/lib/x86_64-linux-gnu/libc.so.6",
-						},
-						{
-							Name:      "libpthread",
-							MountPath: "/lib/x86_64-linux-gnu/libpthread.so.0",
-						},
 					},
 					Ports: []corev1.ContainerPort{
 						{
@@ -935,38 +917,6 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 					VolumeSource: corev1.VolumeSource{
 						HostPath: &corev1.HostPathVolumeSource{
 							Path: "/run/runc",
-						},
-					},
-				},
-				{
-					Name: "ctr",
-					VolumeSource: corev1.VolumeSource{
-						HostPath: &corev1.HostPathVolumeSource{
-							Path: "/usr/local/bin/ctr",
-						},
-					},
-				},
-				{
-					Name: "libdl",
-					VolumeSource: corev1.VolumeSource{
-						HostPath: &corev1.HostPathVolumeSource{
-							Path: "/lib/x86_64-linux-gnu/libdl.so.2",
-						},
-					},
-				},
-				{
-					Name: "libc",
-					VolumeSource: corev1.VolumeSource{
-						HostPath: &corev1.HostPathVolumeSource{
-							Path: "/lib/x86_64-linux-gnu/libc.so.6",
-						},
-					},
-				},
-				{
-					Name: "libpthread",
-					VolumeSource: corev1.VolumeSource{
-						HostPath: &corev1.HostPathVolumeSource{
-							Path: "/lib/x86_64-linux-gnu/libpthread.so.0",
 						},
 					},
 				},
