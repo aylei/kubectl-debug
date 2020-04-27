@@ -42,7 +42,7 @@ spec:
             - name: cgroup
               mountPath: /sys/fs/cgroup
             - name: lxcfs
-              mountPath: /var/lib/lxc/lxcfs
+              mountPath: /var/lib/lxc
               mountPropagation: Bidirectional
             - name: docker
               mountPath: "/var/run/docker.sock"
@@ -50,14 +50,6 @@ spec:
               mountPath: "/run/containerd"
             - name: runrunc
               mountPath: "/run/runc"
-            - name: ctr
-              mountPath: "/usr/local/bin/ctr"
-            - name: libdl
-              mountPath: "/lib/x86_64-linux-gnu/libdl.so.2"
-            - name: libc
-              mountPath: "/lib/x86_64-linux-gnu/libc.so.6"
-            - name: libpthread
-              mountPath: "/lib/x86_64-linux-gnu/libpthread.so.0"
             - name: vardata
               mountPath: "/var/data"
       # hostNetwork: true
@@ -67,7 +59,7 @@ spec:
             path: /sys/fs/cgroup
         - name: lxcfs
           hostPath:
-            path: /var/lib/lxc/lxcfs
+            path: /var/lib/lxc
             type: DirectoryOrCreate
         - name: docker
           hostPath:
@@ -82,20 +74,6 @@ spec:
         - name: runrunc
           hostPath:
             path: /run/runc
-        # Make ctr available in the agent container.  Can be handy for cleaning up 
-        # orphaned debug containers.
-        - name: ctr
-          hostPath:
-            path: /usr/local/bin/ctr
-        - name: libdl
-          hostPath:
-            path: /lib/x86_64-linux-gnu/libdl.so.2
-        - name: libc
-          hostPath:
-            path: /lib/x86_64-linux-gnu/libc.so.6
-        - name: libpthread
-          hostPath:
-            path: /lib/x86_64-linux-gnu/libpthread.so.0
   updateStrategy:
     rollingUpdate:
       maxUnavailable: 5
