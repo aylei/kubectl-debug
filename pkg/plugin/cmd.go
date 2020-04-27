@@ -857,7 +857,7 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 						},
 						{
 							Name:             "lxcfs",
-							MountPath:        "/var/lib/lxc/lxcfs",
+							MountPath:        "/var/lib/lxc",
 							MountPropagation: &prop,
 						},
 						// Make ctr available in the agent container.  Can be handy for cleaning up
@@ -909,7 +909,7 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 					Name: "lxcfs",
 					VolumeSource: corev1.VolumeSource{
 						HostPath: &corev1.HostPathVolumeSource{
-							Path: "/var/lib/lxc/lxcfs",
+							Path: "/var/lib/lxc",
 							Type: &directoryCreate,
 						},
 					},
