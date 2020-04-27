@@ -198,6 +198,11 @@ agentMemoryLimits: ""
 # format is []string
 # If not set, this parameter is empty by default (Means that any labels of the original pod are not retained, and the labels of the copied pods are empty.)
 forkPodRetainLabels: []
+# You can disable SSL certificate check when communicating with image registry by 
+# setting registrySkipTLSVerify to true.
+registrySkipTLSVerify: false
+# You can set the log level with the verbosity setting
+verbosity : 0
 ```
 
 If the debug-agent is not accessible from host port, it is recommended to set `portForward: true` to using port-forawrd mode.
