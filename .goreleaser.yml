@@ -20,6 +20,8 @@ builds:
   ignore:
     - goos: darwin
       goarch: 386
+  ldflags:
+    - -s -w -X 'github.com/aylei/kubectl-debug/version.gitVersion={{.Version}}'
 checksum:
   name_template: 'checksums.txt'
 snapshot:
