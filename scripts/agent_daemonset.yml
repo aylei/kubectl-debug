@@ -42,10 +42,16 @@ spec:
             - name: cgroup
               mountPath: /sys/fs/cgroup
             - name: lxcfs
-              mountPath: /var/lib/lxc/lxcfs
+              mountPath: /var/lib/lxc
               mountPropagation: Bidirectional
             - name: docker
               mountPath: "/var/run/docker.sock"
+            - name: runcontainerd
+              mountPath: "/run/containerd"
+            - name: runrunc
+              mountPath: "/run/runc"
+            - name: vardata
+              mountPath: "/var/data"
       # hostNetwork: true
       volumes:
         - name: cgroup
@@ -53,11 +59,21 @@ spec:
             path: /sys/fs/cgroup
         - name: lxcfs
           hostPath:
-            path: /var/lib/lxc/lxcfs
+            path: /var/lib/lxc
             type: DirectoryOrCreate
         - name: docker
           hostPath:
             path: /var/run/docker.sock
+        # containerd client will need to access /var/data, /run/containerd and /run/runc
+        - name: vardata
+          hostPath:
+            path: /var/data
+        - name: runcontainerd
+          hostPath:
+            path: /run/containerd
+        - name: runrunc
+          hostPath:
+            path: /run/runc
   updateStrategy:
     rollingUpdate:
       maxUnavailable: 5

@@ -1,4 +1,5 @@
 #!/bin/sh
+set -x 
 
 # Cleanup
 /usr/bin/nsenter -m/proc/1/ns/mnt -- fusermount -u /var/lib/lxc/lxcfs 2> /dev/null || true
@@ -6,14 +7,17 @@
         sed -i "/^lxcfs \/var\/lib\/lxc\/lxcfs fuse.lxcfs/d" /etc/mtab
 
 # Prepare
-mkdir -p /usr/local/lib/lxcfs /var/lib/lxc/lxcfs
-
-# Update lxcfs
-cp -f /lxcfs/lxcfs /usr/local/bin/lxcfs
-cp -f /lxcfs/liblxcfs.so /usr/local/lib/lxcfs/liblxcfs.so
-
+/usr/bin/nsenter -m/proc/1/ns/mnt -- mkdir -p /var/lib/lxc/lxcfs
 
 # Mount
-exec /usr/bin/nsenter -m/proc/1/ns/mnt /usr/local/bin/lxcfs /var/lib/lxc/lxcfs/ &
+LXCFS_USR=/usr/bin/lxcfs
+LXCFS=/usr/local/bin/lxcfs
+/usr/bin/nsenter -m/proc/1/ns/mnt -- [ -f $LXCFS_USR ] && LXCFS=$LXCFS_USR
+exec /usr/bin/nsenter -m/proc/1/ns/mnt -- $LXCFS -p "/run/lxcfs-$$.pid" /var/lib/lxc/lxcfs/ &
+
+if grep -q io.containerd.runtime.v1.linux /proc/$PPID/cmdline 
+then
+  export KCTLDBG_CONTAINERDV1_SHIM=io.containerd.runc.v1
+fi   
 
 /bin/debug-agent

@@ -1,15 +1,17 @@
 package agent
 
 import (
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"time"
+
+	"gopkg.in/yaml.v2"
 )
 
 var (
 	DefaultConfig = Config{
 		DockerEndpoint:        "unix:///var/run/docker.sock",
-		DockerTimeout:         30 * time.Second,
+		ContainerdEndpoint:    "/run/containerd/containerd.sock",
+		RuntimeTimeout:        30 * time.Second,
 		StreamIdleTimeout:     10 * time.Minute,
 		StreamCreationTimeout: 15 * time.Second,
 
@@ -19,11 +21,13 @@ var (
 
 type Config struct {
 	DockerEndpoint        string        `yaml:"docker_endpoint,omitempty"`
-	DockerTimeout         time.Duration `yaml:"docker_timeout,omitempty"`
+	ContainerdEndpoint    string        `yaml:"containerd_endpoint,omitempty"`
+	RuntimeTimeout        time.Duration `yaml:"runtime_timeout,omitempty"`
 	StreamIdleTimeout     time.Duration `yaml:"stream_idle_timeout,omitempty"`
 	StreamCreationTimeout time.Duration `yaml:"stream_creation_timeout,omitempty"`
 
 	ListenAddress string `yaml:"listen_address,omitempty"`
+	Verbosity     int    `yaml:"verbosity,omitempty"`
 }
 
 func Load(s string) (*Config, error) {

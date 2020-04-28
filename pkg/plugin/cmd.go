@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -64,7 +65,7 @@ Run a container in a running pod, this container will join the namespaces of an 
 
 You may set default configuration such as image and command in the config file, which locates in "~/.kube/debug-config" by default.
 `
-	defaultImage          = "nicolaka/netshoot:latest"
+	defaultImage          = "docker.io/nicolaka/netshoot:latest"
 	defaultAgentPort      = 10027
 	defaultConfigLocation = "/.kube/debug-config"
 	defaultDaemonSetName  = "debug-agent"
@@ -82,10 +83,12 @@ You may set default configuration such as image and command in the config file, 
 
 	defaultRegistrySecretName      = "kubectl-debug-registry-secret"
 	defaultRegistrySecretNamespace = "default"
+	defaultRegistrySkipTLSVerify   = false
 
 	defaultPortForward = true
 	defaultAgentless   = true
 	defaultLxcfsEnable = true
+	defaultVerbosity   = 0
 )
 
 // DebugOptions specify how to run debug container in a running pod
@@ -99,6 +102,7 @@ type DebugOptions struct {
 	Image                   string
 	RegistrySecretName      string
 	RegistrySecretNamespace string
+	RegistrySkipTLSVerify   bool
 
 	ContainerName       string
 	Command             []string
@@ -138,6 +142,9 @@ type DebugOptions struct {
 	genericclioptions.IOStreams
 
 	wait sync.WaitGroup
+
+	Verbosity int
+	Logger    *log.Logger
 }
 
 type agentPodResources struct {
@@ -155,6 +162,7 @@ func NewDebugOptions(streams genericclioptions.IOStreams) *DebugOptions {
 		PortForwarder: &defaultPortForwarder{
 			IOStreams: streams,
 		},
+		Logger: log.New(streams.Out, "kubectl-debug ", (log.LstdFlags | log.Lshortfile)),
 	}
 }
 
@@ -184,6 +192,8 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		"private registry secret name, default is kubectl-debug-registry-secret")
 	cmd.Flags().StringVar(&opts.RegistrySecretNamespace, "registry-secret-namespace", "",
 		"private registry secret namespace, default is default")
+	cmd.Flags().BoolVar(&opts.RegistrySkipTLSVerify, "registry-skip-tls-verify", false,
+		"If true, the registry's certificate will not be checked for validity. This will make your HTTPS connections insecure")
 	cmd.Flags().StringSliceVar(&opts.ForkPodRetainLabels, "fork-pod-retain-labels", []string{},
 		"in fork mode the pod labels retain labels name list, default is not set")
 	cmd.Flags().StringVarP(&opts.ContainerName, "container", "c", "",
@@ -219,6 +229,8 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		fmt.Sprintf("Agentless mode, agent pod memory limits, default is not set"))
 	cmd.Flags().BoolVarP(&opts.IsLxcfsEnabled, "enable-lxcfs", "", true,
 		fmt.Sprintf("Enable Lxcfs, the target container can use its proc files, default to %t", defaultLxcfsEnable))
+	cmd.Flags().IntVarP(&opts.Verbosity, "verbosity ", "v", 0,
+		fmt.Sprintf("Set logging verbosity, default to %d", defaultVerbosity))
 	opts.Flags.AddFlags(cmd.Flags())
 
 	return cmd
@@ -294,6 +306,13 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 			o.RegistrySecretNamespace = defaultRegistrySecretNamespace
 		}
 	}
+	if !o.RegistrySkipTLSVerify {
+		if config.RegistrySkipTLSVerify {
+			o.RegistrySkipTLSVerify = config.RegistrySkipTLSVerify
+		} else {
+			o.RegistrySkipTLSVerify = defaultRegistrySkipTLSVerify
+		}
+	}
 	if len(o.ForkPodRetainLabels) < 1 {
 		if len(config.ForkPodRetainLabels) > 0 {
 			o.ForkPodRetainLabels = config.ForkPodRetainLabels
@@ -306,6 +325,15 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 			o.AgentPort = defaultAgentPort
 		}
 	}
+
+	if o.Verbosity < 1 {
+		if config.Verbosity > 0 {
+			o.Verbosity = config.Verbosity
+		} else {
+			o.Verbosity = defaultVerbosity
+		}
+	}
+
 	if len(o.DebugAgentNamespace) < 1 {
 		if len(config.DebugAgentNamespace) > 0 {
 			o.DebugAgentNamespace = config.DebugAgentNamespace
@@ -515,7 +543,9 @@ func (o *DebugOptions) Run() error {
 		if agent == nil {
 			return fmt.Errorf("there is no agent pod in the same node with your speficy pod %s", o.PodName)
 		}
-		fmt.Fprintf(o.Out, "pod %s PodIP %s, agentPodIP %s\n", o.PodName, pod.Status.PodIP, agent.Status.HostIP)
+		if o.Verbosity > 0 {
+			fmt.Fprintf(o.Out, "pod %s PodIP %s, agentPodIP %s\n", o.PodName, pod.Status.PodIP, agent.Status.HostIP)
+		}
 		err = o.runPortForward(agent)
 		if err != nil {
 			o.deleteAgent(agentPod)
@@ -525,7 +555,9 @@ func (o *DebugOptions) Run() error {
 		// than we use forward ports to connect the specified pod and that will listen
 		// on specified ports in localhost, the ports can not access until receive the
 		// ready signal
-		fmt.Fprintln(o.Out, "wait for forward port to debug agent ready...")
+		if o.Verbosity > 0 {
+			fmt.Fprintln(o.Out, "wait for forward port to debug agent ready...")
+		}
 		<-o.ReadyChannel
 	}
 
@@ -545,10 +577,20 @@ func (o *DebugOptions) Run() error {
 		params := url.Values{}
 		params.Add("image", o.Image)
 		params.Add("container", containerID)
+		params.Add("verbosity", fmt.Sprintf("%v", o.Verbosity))
+		hstNm, _ := os.Hostname()
+		params.Add("hostname", hstNm)
+		usr, _ := user.Current()
+		params.Add("username", usr.Username)
 		if o.IsLxcfsEnabled {
 			params.Add("lxcfsEnabled", "true")
 		} else {
 			params.Add("lxcfsEnabled", "false")
+		}
+		if o.RegistrySkipTLSVerify {
+			params.Add("registrySkipTLS", "true")
+		} else {
+			params.Add("registrySkipTLS", "false")
 		}
 		var authStr string
 		registrySecret, err := o.CoreClient.Secrets(o.RegistrySecretNamespace).Get(o.RegistrySecretName, v1.GetOptions{})
@@ -614,6 +656,9 @@ func (o *DebugOptions) getContainerIDByName(pod *corev1.Pod, containerName strin
 		if containerStatus.State.Running == nil {
 			return "", fmt.Errorf("container [%s] not running", containerName)
 		}
+		if o.Verbosity > 0 {
+			o.Logger.Printf("Getting id from containerStatus %+v\r\n", containerStatus)
+		}
 		return containerStatus.ContainerID, nil
 	}
 
@@ -624,6 +669,9 @@ func (o *DebugOptions) getContainerIDByName(pod *corev1.Pod, containerName strin
 		}
 		if initContainerStatus.State.Running == nil {
 			return "", fmt.Errorf("init container [%s] is not running", containerName)
+		}
+		if o.Verbosity > 0 {
+			o.Logger.Printf("Getting id from initContainerStatus %+v\r\n", initContainerStatus)
 		}
 		return initContainerStatus.ContainerID, nil
 	}
@@ -640,9 +688,16 @@ func (o *DebugOptions) remoteExecute(
 	tty bool,
 	terminalSizeQueue remotecommand.TerminalSizeQueue) error {
 
+	if o.Verbosity > 0 {
+		o.Logger.Printf("Creating SPDY executor %+v %+v %+v\r\n", config, method, url)
+	}
 	exec, err := remotecommand.NewSPDYExecutor(config, method, url)
 	if err != nil {
+		o.Logger.Printf("Error creating SPDY executor.\r\n")
 		return err
+	}
+	if o.Verbosity > 0 {
+		o.Logger.Printf("Creating exec Stream\r\n")
 	}
 	return exec.Stream(remotecommand.StreamOptions{
 		Stdin:             stdin,
@@ -787,9 +842,22 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 							Name:      "cgroup",
 							MountPath: "/sys/fs/cgroup",
 						},
+						// containerd client will need to access /var/data, /run/containerd and /run/runc
+						{
+							Name:      "vardata",
+							MountPath: "/var/data",
+						},
+						{
+							Name:      "runcontainerd",
+							MountPath: "/run/containerd",
+						},
+						{
+							Name:      "runrunc",
+							MountPath: "/run/runc",
+						},
 						{
 							Name:             "lxcfs",
-							MountPath:        "/var/lib/lxc/lxcfs",
+							MountPath:        "/var/lib/lxc",
 							MountPropagation: &prop,
 						},
 					},
@@ -823,8 +891,32 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 					Name: "lxcfs",
 					VolumeSource: corev1.VolumeSource{
 						HostPath: &corev1.HostPathVolumeSource{
-							Path: "/var/lib/lxc/lxcfs",
+							Path: "/var/lib/lxc",
 							Type: &directoryCreate,
+						},
+					},
+				},
+				{
+					Name: "vardata",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: "/var/data",
+						},
+					},
+				},
+				{
+					Name: "runcontainerd",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: "/run/containerd",
+						},
+					},
+				},
+				{
+					Name: "runrunc",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: "/run/runc",
 						},
 					},
 				},
@@ -848,8 +940,15 @@ func (o *DebugOptions) runPortForward(pod *corev1.Pod) error {
 			Namespace(pod.Namespace).
 			Name(pod.Name).
 			SubResource("portforward")
-		o.PortForwarder.ForwardPorts("POST", req.URL(), o)
-		fmt.Fprintln(o.Out, "end port-forward...")
+		err := o.PortForwarder.ForwardPorts("POST", req.URL(), o)
+		if err != nil {
+			log.Printf("PortForwarded failed with %+v\r\n", err)
+			log.Printf("Sending ready signal just in case the failure reason is that the port is already forwarded.\r\n")
+			o.ReadyChannel <- struct{}{}
+		}
+		if o.Verbosity > 0 {
+			fmt.Fprintln(o.Out, "end port-forward...")
+		}
 	}()
 	return nil
 }

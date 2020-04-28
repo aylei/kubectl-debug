@@ -3,10 +3,12 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,21 +16,12 @@ import (
 	kubeletremote "k8s.io/kubernetes/pkg/kubelet/server/remotecommand"
 )
 
-const (
-	dockerContainerPrefix = "docker://"
-)
-
 type Server struct {
-	config     *Config
-	runtimeApi *RuntimeManager
+	config *Config
 }
 
 func NewServer(config *Config) (*Server, error) {
-	runtime, err := NewRuntimeManager(config.DockerEndpoint, config.DockerTimeout)
-	if err != nil {
-		return nil, err
-	}
-	return &Server{config: config, runtimeApi: runtime}, nil
+	return &Server{config: config}, nil
 }
 
 func (s *Server) Run() error {
@@ -59,6 +52,13 @@ func (s *Server) Run() error {
 	return nil
 }
 
+func maxInt(lhs, rhs int) int {
+	if lhs >= rhs {
+		return lhs
+	}
+	return rhs
+}
+
 // ServeDebug serves the debug request.
 // first, it will upgrade the connection to SPDY.
 // then, server will try to create the debug container, and sent creating progress to user via SPDY.
@@ -68,15 +68,7 @@ func (s *Server) Run() error {
 func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 
 	log.Println("receive debug request")
-	containerId := req.FormValue("container")
-	if len(containerId) < 1 {
-		http.Error(w, "target container id must be provided", 400)
-		return
-	}
-	if !strings.HasPrefix(containerId, dockerContainerPrefix) {
-		http.Error(w, "only docker container is suppored right now", 400)
-	}
-	dockerContainerId := containerId[len(dockerContainerPrefix):]
+	containerUri := req.FormValue("container")
 
 	image := req.FormValue("image")
 	if len(image) < 1 {
@@ -103,22 +95,58 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 	} else if lxcfsEnabled == "true" {
 		LxcfsEnabled = true
 	}
+	var registrySkipTLS bool
+	registrySkipTLSParam := req.FormValue("registrySkipTLS")
+	if registrySkipTLSParam == "" || registrySkipTLSParam == "false" {
+		registrySkipTLS = false
+	} else if registrySkipTLSParam == "true" {
+		registrySkipTLS = true
+	}
+	sverbosity := req.FormValue("verbosity")
+	if sverbosity == "" {
+		sverbosity = "0"
+	}
+	iverbosity, _ := strconv.Atoi(sverbosity)
 
 	context, cancel := context.WithCancel(req.Context())
 	defer cancel()
 
+	runtime, err := NewRuntimeManager(*s.config, containerUri,
+		maxInt(iverbosity, s.config.Verbosity),
+		req.FormValue("hostname"),
+		req.FormValue("username"))
+	if err != nil {
+		msg := fmt.Sprintf("Failed to construct RuntimeManager.  Error: %s", err.Error())
+		log.Println(msg)
+		// 2020-04-15 d :
+		// The client will be in SPDY roundtripper when we return this.  This passes the response to
+		// statusCodecs.UniversalDecoder().Decode.  Decode will see any ":" as indication that the
+		// response bytes are an object to be deserialized and consequently our message to the client
+		// will be lost.
+		http.Error(w, strings.ReplaceAll(msg, ":", "-"), 400)
+		return
+	}
+
 	// replace Attacher implementation to hook the ServeAttach procedure
+	if s.config.Verbosity > 0 {
+		log.Println("Invoking kubeletremote.ServeAttach")
+	}
+
 	kubeletremote.ServeAttach(
 		w,
 		req,
-		s.runtimeApi.GetAttacher(image, authStr, LxcfsEnabled, commandSlice, context, cancel),
+		runtime.GetAttacher(image, authStr, LxcfsEnabled, registrySkipTLS,
+			commandSlice, context, cancel),
 		"",
 		"",
-		dockerContainerId,
+		"",
 		streamOpts,
 		s.config.StreamIdleTimeout,
 		s.config.StreamCreationTimeout,
 		remoteapi.SupportedStreamingProtocols)
+	if s.config.Verbosity > 0 {
+		log.Println("kubeletremote.ServeAttach returned")
+	}
 }
 
 func (s *Server) Healthz(w http.ResponseWriter, req *http.Request) {

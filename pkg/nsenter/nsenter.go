@@ -10,7 +10,7 @@ import (
 
 // MountNSEnter is the client used to enter the mount namespace
 type MountNSEnter struct {
-	Target     int    // target PID (required)
+	Target     int64  // target PID (required)
 	MountLxcfs bool   // enter mount namespace or not
 	MountFile  string // Mount namespace location, default to /proc/PID/ns/mnt
 }
@@ -46,7 +46,7 @@ func (cli *MountNSEnter) setCommand(ctx context.Context) (*exec.Cmd, error) {
 		return nil, fmt.Errorf("Target must be specified")
 	}
 	var args []string
-	args = append(args, "--target", strconv.Itoa(cli.Target))
+	args = append(args, "--target", strconv.FormatInt(cli.Target, 10))
 
 	if cli.MountLxcfs {
 		if cli.MountFile != "" {

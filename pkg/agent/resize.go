@@ -25,10 +25,6 @@ import (
 // remotecommand.TerminalSize received from the channel. The resize channel must be closed elsewhere to stop the
 // goroutine.
 func HandleResizing(resize <-chan remotecommand.TerminalSize, resizeFunc func(size remotecommand.TerminalSize)) {
-	if resize == nil {
-		return
-	}
-
 	go func() {
 		defer runtime.HandleCrash()
 

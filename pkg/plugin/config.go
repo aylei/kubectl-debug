@@ -15,6 +15,7 @@ type Config struct {
 	Image                   string   `yaml:"image,omitempty"`
 	RegistrySecretName      string   `yaml:"registrySecretName,omitempty"`
 	RegistrySecretNamespace string   `yaml:"registrySecretNamespace,omitempty"`
+	RegistrySkipTLSVerify   bool     `yaml:"registrySkipTLSVerify,omitempty"`
 	ForkPodRetainLabels     []string `yaml:"forkPodRetainLabels,omitempty"`
 	DebugAgentDaemonSet     string   `yaml:"debugAgentDaemonset,omitempty"`
 	DebugAgentNamespace     string   `yaml:"debugAgentNamespace,omitempty"`
@@ -29,6 +30,7 @@ type Config struct {
 	AgentPodCpuLimits       string   `yaml:"agentCpuLimits,omitempty"`
 	AgentPodMemoryLimits    string   `yaml:"agentMemoryLimits,omitempty"`
 	IsLxcfsEnabled          bool     `yaml:"isLxcfsEnabled,omitempty"`
+	Verbosity               int      `yaml:"verbosity,omitempty"`
 	// deprecated
 	AgentPortOld int `yaml:"agent_port,omitempty"`
 }
