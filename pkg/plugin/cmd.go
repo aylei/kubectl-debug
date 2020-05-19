@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/user"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -89,6 +91,10 @@ You may set default configuration such as image and command in the config file, 
 	defaultAgentless   = true
 	defaultLxcfsEnable = true
 	defaultVerbosity   = 0
+
+	enableLxcsFlag  = "enable-lxcfs"
+	portForwardFlag = "port-forward"
+	agentlessFlag   = "agentless"
 )
 
 // DebugOptions specify how to run debug container in a running pod
@@ -201,17 +207,17 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	cmd.Flags().IntVarP(&opts.AgentPort, "port", "p", 0,
 		fmt.Sprintf("Agent port for debug cli to connect, default to %d", defaultAgentPort))
 	cmd.Flags().StringVar(&opts.ConfigLocation, "debug-config", "",
-		fmt.Sprintf("Debug config file, default to ~%s", defaultConfigLocation))
+		fmt.Sprintf("Debug config file, default to ~%s", filepath.FromSlash(defaultConfigLocation)))
 	cmd.Flags().BoolVar(&opts.Fork, "fork", false,
 		"Fork a new pod for debugging (useful if the pod status is CrashLoopBackoff)")
-	cmd.Flags().BoolVar(&opts.PortForward, "port-forward", true,
+	cmd.Flags().BoolVar(&opts.PortForward, portForwardFlag, true,
 		fmt.Sprintf("Whether using port-forward to connect debug-agent, default to %t", defaultPortForward))
 	cmd.Flags().StringVar(&opts.DebugAgentDaemonSet, "daemonset-name", opts.DebugAgentDaemonSet,
 		"Debug agent daemonset name when using port-forward")
 	cmd.Flags().StringVar(&opts.DebugAgentNamespace, "daemonset-ns", opts.DebugAgentNamespace,
 		"Debug agent namespace, default to 'default'")
 	// flags used for agentless mode.
-	cmd.Flags().BoolVarP(&opts.AgentLess, "agentless", "a", true,
+	cmd.Flags().BoolVarP(&opts.AgentLess, agentlessFlag, "a", true,
 		fmt.Sprintf("Whether to turn on agentless mode. Agentless mode: debug target pod if there isn't an agent running on the target host, default to %t", defaultAgentless))
 	cmd.Flags().StringVar(&opts.AgentImage, "agent-image", "",
 		fmt.Sprintf("Agentless mode, the container Image to run the agent container , default to %s", defaultAgentImage))
@@ -227,7 +233,7 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		fmt.Sprintf("Agentless mode, agent pod cpu limits, default is not set"))
 	cmd.Flags().StringVar(&opts.AgentPodResource.MemoryLimits, "agent-pod-memory-limits", "",
 		fmt.Sprintf("Agentless mode, agent pod memory limits, default is not set"))
-	cmd.Flags().BoolVarP(&opts.IsLxcfsEnabled, "enable-lxcfs", "", true,
+	cmd.Flags().BoolVarP(&opts.IsLxcfsEnabled, enableLxcsFlag, "", true,
 		fmt.Sprintf("Enable Lxcfs, the target container can use its proc files, default to %t", defaultLxcfsEnable))
 	cmd.Flags().IntVarP(&opts.Verbosity, "verbosity ", "v", 0,
 		fmt.Sprintf("Set logging verbosity, default to %d", defaultVerbosity))
@@ -264,7 +270,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 	if len(o.ConfigLocation) < 1 {
 		usr, err := user.Current()
 		if err == nil {
-			configFile = usr.HomeDir + defaultConfigLocation
+			configFile = usr.HomeDir + filepath.FromSlash(defaultConfigLocation)
 		}
 	}
 	config, err := LoadFile(configFile)
@@ -405,17 +411,16 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		}
 	}
 
-	if o.IsLxcfsEnabled {
+	if !cmd.Flag(enableLxcsFlag).Changed {
 		o.IsLxcfsEnabled = config.IsLxcfsEnabled
-	} else {
-		o.IsLxcfsEnabled = defaultLxcfsEnable
 	}
 
-	if config.PortForward {
-		o.PortForward = true
+	if !cmd.Flag(portForwardFlag).Changed {
+		o.PortForward = config.PortForward
 	}
-	if config.Agentless {
-		o.AgentLess = true
+
+	if !cmd.Flag(agentlessFlag).Changed {
+		o.AgentLess = config.Agentless
 	}
 
 	o.Ports = []string{strconv.Itoa(o.AgentPort)}
@@ -541,7 +546,7 @@ func (o *DebugOptions) Run() error {
 		}
 
 		if agent == nil {
-			return fmt.Errorf("there is no agent pod in the same node with your speficy pod %s", o.PodName)
+			return fmt.Errorf("there is no agent pod in the same node with your specified pod %s", o.PodName)
 		}
 		if o.Verbosity > 0 {
 			fmt.Fprintf(o.Out, "pod %s PodIP %s, agentPodIP %s\n", o.PodName, pod.Status.PodIP, agent.Status.HostIP)
@@ -596,12 +601,18 @@ func (o *DebugOptions) Run() error {
 		registrySecret, err := o.CoreClient.Secrets(o.RegistrySecretNamespace).Get(o.RegistrySecretName, v1.GetOptions{})
 		if err != nil {
 			if errors.IsNotFound(err) {
+				if o.Verbosity > 0 {
+					o.Logger.Printf("Secret %v not found in namespace %v\r\n", o.RegistrySecretName, o.RegistrySecretNamespace)
+				}
 				authStr = ""
 			} else {
 				return err
 			}
 		} else {
-			authStr = string(registrySecret.Data["authStr"])
+			if o.Verbosity > 1 {
+				o.Logger.Printf("Found secret %v:%v\r\n", o.RegistrySecretNamespace, o.RegistrySecretName)
+			}
+			authStr, _ = o.extractSecret(registrySecret.Data)
 		}
 		params.Add("authStr", authStr)
 		commandBytes, err := json.Marshal(o.Command)
@@ -645,6 +656,47 @@ func (o *DebugOptions) Run() error {
 	}
 	o.wait.Wait()
 	return nil
+}
+
+func (o *DebugOptions) extractSecret(scrtDta map[string][]byte) (string, error) {
+	var ret []byte
+	ret = scrtDta["authStr"]
+	if len(ret) == 0 {
+		// In IKS ( IBM Kubernetes ) the secret is stored in a json blob with the key '.dockerconfigjson'
+		// The json has the form
+		// {"auths":{"<REGISTRY FOR REGION>":{"username":"iamapikey","password":"<APIKEY>","email":"iamapikey","auth":"<APIKEY>"}}}
+		// Where <REGISTRY FOR REGION> would be one of the public domain names values here
+		// https://cloud.ibm.com/docs/Registry?topic=registry-registry_overview#registry_regions_local
+		// e.g. us.icr.io
+		ret = scrtDta[".dockerconfigjson"]
+		if len(ret) == 0 {
+			return "", nil
+		} else if o.Verbosity > 0 {
+			o.Logger.Printf("Found secret with key .dockerconfigjson\r\n")
+		}
+
+		var dta map[string]interface{}
+		if err := json.Unmarshal(ret, &dta); err != nil {
+			o.Logger.Printf("Failed to parse .dockerconfigjson value: %v\r\n", err)
+			return "", err
+		} else {
+			dta = dta["auths"].(map[string]interface{})
+			// Under auths there will be a value stored with the region key.  e.g. "us.icr.io"
+			for _, v := range dta {
+				dta = v.(map[string]interface{})
+				break
+			}
+			sret := dta["auth"].(string)
+			ret, err = base64.StdEncoding.DecodeString(sret)
+			if err != nil {
+				o.Logger.Printf("Failed to base 64 decode auth value : %v\r\n", err)
+				return "", err
+			}
+		}
+	} else if o.Verbosity > 0 {
+		o.Logger.Println("Found secret with key authStr")
+	}
+	return string(ret), nil
 }
 
 func (o *DebugOptions) getContainerIDByName(pod *corev1.Pod, containerName string) (string, error) {

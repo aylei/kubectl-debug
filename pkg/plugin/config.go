@@ -37,6 +37,9 @@ type Config struct {
 
 func Load(s string) (*Config, error) {
 	cfg := &Config{}
+	cfg.Agentless = true
+	cfg.PortForward = true
+	cfg.IsLxcfsEnabled = true
 	err := yaml.Unmarshal([]byte(s), cfg)
 	if err != nil {
 		return nil, err

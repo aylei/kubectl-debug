@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -81,7 +82,7 @@ func (c *RunConfig) getContextWithTimeout() (context.Context, context.CancelFunc
 type ContainerRuntime interface {
 	PullImage(ctx context.Context, image string,
 		skipTLS bool, authStr string,
-		stdout io.WriteCloser) error
+		cfg RunConfig) error
 	ContainerInfo(ctx context.Context, cfg RunConfig) (ContainerInfo, error)
 	RunDebugContainer(cfg RunConfig) error
 }
@@ -94,7 +95,7 @@ var DockerContainerRuntimeImplementsContainerRuntime ContainerRuntime = (*Docker
 
 func (c *DockerContainerRuntime) PullImage(ctx context.Context,
 	image string, skipTLS bool, authStr string,
-	stdout io.WriteCloser) error {
+	cfg RunConfig) error {
 	authBytes := base64.URLEncoding.EncodeToString([]byte(authStr))
 	out, err := c.client.ImagePull(ctx, image, types.ImagePullOptions{RegistryAuth: string(authBytes)})
 	if err != nil {
@@ -102,7 +103,9 @@ func (c *DockerContainerRuntime) PullImage(ctx context.Context,
 	}
 	defer out.Close()
 	// write pull progress to user
-	term.DisplayJSONMessagesStream(out, stdout, 1, true, nil)
+	if cfg.verbosity > 0 {
+		term.DisplayJSONMessagesStream(out, cfg.stdout, 1, true, nil)
+	}
 	return nil
 }
 
@@ -502,20 +505,27 @@ outer:
 func (c *ContainerdContainerRuntime) PullImage(
 	ctx context.Context, image string, skipTLS bool,
 	authStr string,
-	stdout io.WriteCloser) error {
+	cfg RunConfig) error {
 
+	authStr, err := url.QueryUnescape(authStr)
+	if err != nil {
+		log.Printf("Failed to decode authStr: %v\r\n", err)
+		return err
+	}
 	ctx = namespaces.WithNamespace(ctx, KubectlDebugNS)
 
 	ongoing := newJobs(image)
 	pctx, stopProgress := context.WithCancel(ctx)
-	progress := make(chan struct{})
-	go func() {
-		if stdout != nil {
-			// no progress bar, because it hides some debug logs
-			showProgress(pctx, ongoing, c.client.ContentStore(), stdout)
-		}
-		close(progress)
-	}()
+	if cfg.verbosity > 0 {
+		progress := make(chan struct{})
+		go func() {
+			if cfg.stdout != nil {
+				// no progress bar, because it hides some debug logs
+				showProgress(pctx, ongoing, c.client.ContentStore(), cfg.stdout)
+			}
+			close(progress)
+		}()
+	}
 
 	rslvrOpts := docker.ResolverOptions{
 		Tracker: PushTracker,
@@ -526,6 +536,9 @@ func (c *ContainerdContainerRuntime) PullImage(
 	}
 
 	crds := strings.Split(authStr, ":")
+	if cfg.verbosity > 0 {
+		log.Printf("User name for pull : %v\r\n", crds[0])
+	}
 	var useCrds = len(crds) == 2
 	if useCrds || skipTLS {
 		tr := &http.Transport{
@@ -549,7 +562,13 @@ func (c *ContainerdContainerRuntime) PullImage(
 		}
 
 		if useCrds {
+			if cfg.verbosity > 0 {
+				log.Println("Setting credentials call back")
+			}
 			crdsClbck := func(host string) (string, string, error) {
+				if cfg.verbosity > 0 {
+					log.Printf("crdsClbck returning username: %v\r\n", crds[0])
+				}
 				return crds[0], crds[1], nil
 			}
 
@@ -562,7 +581,6 @@ func (c *ContainerdContainerRuntime) PullImage(
 		rmtOpts = append(rmtOpts, containerd.WithResolver(docker.NewResolver(rslvrOpts)))
 	}
 
-	var err error
 	c.image, err = c.client.Pull(ctx, image, rmtOpts...)
 	stopProgress()
 
@@ -904,12 +922,8 @@ func (m *DebugAttacher) DebugContainer(cfg RunConfig) error {
 	if cfg.verbosity > 0 {
 		cfg.stdout.Write([]byte(fmt.Sprintf("pulling image %s, skip TLS %v... \n\r", m.image, m.registrySkipTLS)))
 	}
-	ioForPull := cfg.stdout
-	if cfg.verbosity < 1 {
-		ioForPull = nil
-	}
 	err := m.containerRuntime.PullImage(m.context, m.image,
-		m.registrySkipTLS, m.authStr, ioForPull)
+		m.registrySkipTLS, m.authStr, cfg)
 	if err != nil {
 		return err
 	}
