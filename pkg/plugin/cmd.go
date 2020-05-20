@@ -524,6 +524,9 @@ func (o *DebugOptions) Run() error {
 		var agent *corev1.Pod
 		if !o.AgentLess {
 			// Agent is running
+			if o.Verbosity > 0 {
+				o.Logger.Printf("Fetching daemonset '%v' from namespace %v\r\n", o.DebugAgentDaemonSet, o.DebugAgentNamespace)
+			}
 			daemonSet, err := o.KubeCli.AppsV1().DaemonSets(o.DebugAgentNamespace).Get(o.DebugAgentDaemonSet, v1.GetOptions{})
 			if err != nil {
 				return err
