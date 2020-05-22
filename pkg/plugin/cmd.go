@@ -33,6 +33,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	coreclient "k8s.io/client-go/kubernetes/typed/core/v1"
 	restclient "k8s.io/client-go/rest"
+	cmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/client-go/tools/watch"
@@ -151,6 +152,7 @@ type DebugOptions struct {
 
 	Verbosity int
 	Logger    *log.Logger
+	UserName  string
 }
 
 type agentPodResources struct {
@@ -428,6 +430,37 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 	if err != nil {
 		return err
 	}
+
+	o.UserName = "unidentified user"
+	// cli help for the flags referenced below can be viewed by running
+	// kubectl options
+	if o.Flags.Username != nil && len(*o.Flags.Username) > 0 {
+		// --username : "Username for basic authentication to the API server"
+		o.UserName = *o.Flags.Username
+		log.Printf("User name '%v' received from switch --username\r\n", o.UserName)
+	} else if o.Flags.AuthInfoName != nil && len(*o.Flags.AuthInfoName) > 0 {
+		// --user : "The name of the kubeconfig user to use"
+		o.UserName = *o.Flags.AuthInfoName
+		log.Printf("User name '%v' received from switch --user\r\n", o.UserName)
+	} else {
+		rwCfg, err := configLoader.RawConfig()
+		if err != nil {
+			log.Printf("Failed to load configuration : %v\r\n", err)
+			return err
+		}
+		var cfgCtxt *cmdapi.Context
+		if o.Flags.Context != nil && len(*o.Flags.Context) > 0 {
+			// --context : "The name of the kubeconfig context to use"
+			cfgCtxt = rwCfg.Contexts[*o.Flags.Context]
+			log.Printf("Getting user name from context '%v' received from switch --context\r\n", *o.Flags.Context)
+		} else {
+			cfgCtxt = rwCfg.Contexts[rwCfg.CurrentContext]
+			log.Printf("Getting user name from default context '%v'\r\n", rwCfg.CurrentContext)
+		}
+		o.UserName = cfgCtxt.AuthInfo
+		log.Printf("User name '%v' received from context\r\n", o.UserName)
+	}
+
 	clientset, err := kubernetes.NewForConfig(o.Config)
 	if err != nil {
 		return err
@@ -588,8 +621,7 @@ func (o *DebugOptions) Run() error {
 		params.Add("verbosity", fmt.Sprintf("%v", o.Verbosity))
 		hstNm, _ := os.Hostname()
 		params.Add("hostname", hstNm)
-		usr, _ := user.Current()
-		params.Add("username", usr.Username)
+		params.Add("username", o.UserName)
 		if o.IsLxcfsEnabled {
 			params.Add("lxcfsEnabled", "true")
 		} else {

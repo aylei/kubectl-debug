@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"encoding/base64"
@@ -13,8 +14,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 	"sync"
+	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -73,6 +76,9 @@ type RunConfig struct {
 	clientHostName       string
 	clientUserName       string
 	verbosity            int
+	audit                bool
+	auditFifo            string
+	auditShim            []string
 }
 
 func (c *RunConfig) getContextWithTimeout() (context.Context, context.CancelFunc) {
@@ -671,13 +677,75 @@ func GetPIDNamespace(pid int64) string {
 func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
 	defer c.client.Close()
 
+	uuid := uuid.New().String()
+	fifoNm := ""
+	if cfg.audit {
+		fifoDir, _ := path.Split(cfg.auditFifo)
+		err := os.MkdirAll(fifoDir, 0777)
+		if err != nil {
+			fmt.Printf("Failed to create directory for audit fifos, %v : %v\r\n", fifoDir, err)
+			return err
+		}
+		fifoNm = strings.ReplaceAll(cfg.auditFifo, "KCTLDBG-CONTAINER-ID", uuid)
+		if cfg.verbosity > 0 {
+			log.Printf("Creating fifo %v for receiving audit data.\r\n", fifoNm)
+		}
+		err = syscall.Mkfifo(fifoNm, 0600)
+		if err != nil {
+			fmt.Printf("Failed to create audit fifo %v : %v\r\n", fifoNm, err)
+			return err
+		} else {
+			defer os.Remove(fifoNm)
+		}
+
+		go func() {
+			log.Println("Audit read thread started.")
+			fl, rdErr := os.Open(fifoNm)
+			if rdErr != nil {
+				log.Printf("Audit read thread aborting.  Failed to open fifo : %v\r\n", rdErr)
+				return
+			}
+			log.Println("Audit read thread started.")
+			defer fl.Close()
+			rdr := bufio.NewReader(fl)
+			var ln []byte
+			for {
+				ln, _, rdErr = rdr.ReadLine()
+				if rdErr != nil {
+					break
+				}
+				log.Printf("audit - user: %v debugee: %v exec: %v\r\n", cfg.clientUserName,
+					cfg.idOfContainerToDebug, string(ln))
+			}
+			if rdErr != nil {
+				if rdErr == io.EOF {
+					log.Printf("EOF reached while reading from %v.  Audit read thread exiting.\r\n", fifoNm)
+				} else {
+					log.Printf("Error %v while reading from %v.  Audit read thread exiting.\r\n", rdErr, fifoNm)
+				}
+			}
+		}()
+	}
+	// If audit, create thread for reading from fifo, defer clean up of thread
 	ctx := namespaces.WithNamespace(cfg.context, KubectlDebugNS)
 
 	var spcOpts []oci.SpecOpts
 	spcOpts = append(spcOpts, oci.WithImageConfig(c.image))
 	spcOpts = append(spcOpts, oci.WithPrivileged)
-	spcOpts = append(spcOpts, oci.WithProcessArgs(cfg.command...))
+	// if audit, build command vector array using shim + cfg.command
+	// Make sure to replace KCTLDBG-FIFO with the actual fifo path ( Or maybe that is done before we get this far )
+	if cfg.audit {
+		cmd := append([]string(nil), cfg.auditShim...)
+		for i, s := range cmd {
+			cmd[i] = strings.ReplaceAll(s, "KCTLDBG-FIFO", fifoNm)
+		}
+		cmd = append(cmd, cfg.command...)
+		spcOpts = append(spcOpts, oci.WithProcessArgs(cmd...))
+	} else {
+		spcOpts = append(spcOpts, oci.WithProcessArgs(cfg.command...))
+	}
 	spcOpts = append(spcOpts, oci.WithTTY)
+	// If fifo, make sure fifo is bind mounted
 	trgtInf, err := c.ContainerInfo(ctx, cfg)
 	if err != nil {
 		log.Printf("Failed to get a pid from target container %s : %v\r\n",
@@ -688,6 +756,16 @@ func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
 		Type: specs.NetworkNamespace,
 		Path: GetNetworkNamespace(trgtInf.Pid),
 	}))
+
+	if fifoNm != "" {
+		kbctlDbgMnt := specs.Mount{
+			Destination: fifoNm,
+			Source:      fifoNm,
+			Type:        "bind",
+			Options:     []string{"bind", "rw"},
+		}
+		spcOpts = append(spcOpts, oci.WithMounts([]specs.Mount{kbctlDbgMnt}))
+	}
 	// 2020-04-21 d :
 	// Tried setting the user namespace without success.
 	// - If I just use WithLinuxNamespace and don't use WithUserNamespace
@@ -714,7 +792,6 @@ func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
 		Type: specs.PIDNamespace,
 		Path: GetPIDNamespace(trgtInf.Pid),
 	}))
-	uuid := uuid.New().String()
 	cntnr, err := c.client.NewContainer(
 		ctx,
 		// Was using "dbg-[idOfContainerToDebug]" but this meant that you couldn't use multiple debug containers for the same debugee
@@ -841,6 +918,11 @@ type DebugAttacher struct {
 	stopListenEOF chan struct{}
 	context       context.Context
 	cancel        context.CancelFunc
+
+	// audit options
+	audit     bool
+	auditFifo string
+	auditShim []string
 }
 
 var DebugAttacherImplementsAttacher kubeletremote.Attacher = (*DebugAttacher)(nil)
@@ -869,6 +951,9 @@ func (a *DebugAttacher) AttachContainer(name string, uid kubetype.UID, container
 		clientHostName:       a.clientHostName,
 		clientUserName:       a.clientUserName,
 		verbosity:            a.verbosity,
+		audit:                a.audit,
+		auditFifo:            a.auditFifo,
+		auditShim:            a.auditShim,
 	})
 }
 
@@ -974,6 +1059,9 @@ type RuntimeManager struct {
 	containerScheme      ContainerRuntimeScheme
 	clientHostName       string
 	clientUserName       string
+	audit                bool
+	auditFifo            string
+	auditShim            []string
 }
 
 func NewRuntimeManager(srvCfg Config, containerUri string, verbosity int,
@@ -1037,6 +1125,9 @@ func NewRuntimeManager(srvCfg Config, containerUri string, verbosity int,
 		containerScheme:      containerScheme,
 		clientHostName:       hstNm,
 		clientUserName:       usrNm,
+		audit:                srvCfg.Audit,
+		auditFifo:            srvCfg.AuditFifo,
+		auditShim:            srvCfg.AuditShim,
 	}, nil
 }
 
@@ -1070,5 +1161,8 @@ func (m *RuntimeManager) GetAttacher(image, authStr string,
 		stopListenEOF:        make(chan struct{}),
 		clientHostName:       m.clientHostName,
 		clientUserName:       m.clientUserName,
+		audit:                m.audit,
+		auditFifo:            m.auditFifo,
+		auditShim:            m.auditShim,
 	}
 }

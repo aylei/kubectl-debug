@@ -20,4 +20,4 @@ then
   export KCTLDBG_CONTAINERDV1_SHIM=io.containerd.runc.v1
 fi   
 
-/bin/debug-agent
+/bin/debug-agent "$@"

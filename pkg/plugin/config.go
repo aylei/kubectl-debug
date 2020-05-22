@@ -6,10 +6,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type RegistryAuthConfig struct {
-	Username string `yaml:"username,omitempty"`
-	Password string `yaml:"password,omitempty"`
-}
 type Config struct {
 	AgentPort               int      `yaml:"agentPort,omitempty"`
 	Image                   string   `yaml:"image,omitempty"`

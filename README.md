@@ -213,6 +213,69 @@ PS: `kubectl-debug` will always override the entrypoint of the container, which 
 
 Currently, `kubectl-debug` reuse the privilege of the `pod/exec` sub resource to do authorization, which means that it has the same privilege requirements with the `kubectl exec` command.
 
+# Auditing / Security
+
+Some teams may want to limit what debug image users are allowed to use and to have an audit record for each command they run in the debug container.
+
+You can use the environent variable ```KCTLDBG_RESTRICT_IMAGE_TO``` restrict the agent to using a specific container image.   For example putting the following in the container spec section of your daemonset yaml will force the agent to always use the image ```docker.io/nicolaka/netshoot:latest``` regardless of what the user specifies on the kubectl-debug command line 
+```
+          env : 
+            - name: KCTLDBG_RESTRICT_IMAGE_TO
+              value: docker.io/nicolaka/netshoot:latest
+```
+If ```KCTLDBG_RESTRICT_IMAGE_TO``` is set and as a result agent is using an image that is different than what the user requested then the agent will log to standard out a message that announces what is happening.   The message will include the URI's of both images.
+
+Auditing can be enabled by placing 
+```audit: true```
+in the agent's config file.  
+
+There are 3 settings related to auditing.
+<dl>
+<dt><code>audit</code></dt>
+<dd>Boolean value that indicates whether auditing should be enabled or not.  Default value is <code>false</code></dd>
+<dt><code>audit_fifo</code></dt>
+<dd>Template of path to a FIFO that will be used to exchange audit information from the debug container to the agent.  The default value is <code>/var/data/kubectl-debug-audit-fifo/KCTLDBG-CONTAINER-ID</code>.   If auditing is enabled then the agent will :
+<ol>
+<li>Prior to creating the debug container, create a fifo based on the value of <code>audit_fifo</code>.  The agent will replace <code>KCTLDBG-CONTAINER-ID</code> with the id of the debug container it is creating.</li>
+<li>Create a thread that reads lines of text from the FIFO and then writes log messages to standard out, where the log messages look similar to example below <br/>
+<code>
+2020/05/22 17:59:58 runtime.go:717: audit - user: USERNAME/885cbd0506868985a6fc491bb59a2d3c debugee: 48107cbdacf4b478cbf1e2e34dbea6ebb48a2942c5f3d1effbacf0a216eac94f exec: 265   execve("/bin/tar", ["tar", "--help"], 0x55a8d0dfa6c0 /* 7 vars */) = 0
+</code><br/>
+Where USERNAME is the kubernetes user as determined by the client that launched the debug container and debuggee is the container id of the container being debugged.
+</li>
+<li>Bind mount the fifo it creates to the debugger container.  </li>
+</ol>
+</dd>
+<dt><code>audit_shim</code>
+<dd>String array that will be placed before the command that will be run in the debug container.  The default value is <code>{"/usr/bin/strace", "-o", "KCTLDBG-FIFO", "-f", "-e", "trace=/exec"}</code>.  The agent will replace KCTLDBG-FIFO with the fifo path ( see above )  If auditing is enabled then agent will use the concatenation of the array specified by <code>audit_shim</code> and the original command array it was going to use.</dd>
+</dl>
+
+The easiest way to enable auditing is to define a config map in the yaml you use to deploy the deamonset.   You can do this by place 
+```
+apiVersion : v1
+kind: ConfigMap 
+metadata: 
+  name : kubectl-debug-agent-config
+data: 
+  agent-config.yml: |  
+    audit: true
+---    
+```
+at the top of the file, adding a ```configmap``` volume like so
+```
+        - name: config
+          configMap:
+            name: kubectl-debug-agent-config
+```
+and a volume mount like so
+```
+            - name: config
+              mountPath: "/etc/kubectl-debug/agent-config.yml"
+              subPath: agent-config.yml
+```
+.
+
+
 # Roadmap
 
 `kubectl-debug` is supposed to be just a troubleshooting helper, and is going be replaced by the native `kubectl debug` command when [this proposal](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/node/troubleshoot-running-pods.md) is implemented and merged in the future kubernetes release. But for now, there is still some works to do to improve `kubectl-debug`.
