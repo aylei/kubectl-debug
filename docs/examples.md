@@ -111,9 +111,9 @@ root @ /
 Hello, world!
 ```
 
-## Debug Pod in "CashLoopBackoff"
+## Debug Pod in "CrashLoopBackoff"
 
-Troubleshooting `CashLoopBackoff` of Kubernetes Pod can be tricky. The debug container process will be reaped once the target container (process with pid 1) exists. To tackle with this, `kubectl-debug` provides the `--fork` flag, which borrow the idea from the `oc debug` command: copy the currently Pod and re-produce the issue in the forked Pod.
+Troubleshooting `CrashLoopBackoff` of Kubernetes Pod can be tricky. The debug container process will be reaped once the target container (process with pid 1) exists. To tackle with this, `kubectl-debug` provides the `--fork` flag, which borrow the idea from the `oc debug` command: copy the currently Pod and re-produce the issue in the forked Pod.
 
 Under the hood, `kubectl debug --fork` will copy the entire Pod spec and:
 
