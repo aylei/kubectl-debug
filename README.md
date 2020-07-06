@@ -217,7 +217,7 @@ Currently, `kubectl-debug` reuse the privilege of the `pod/exec` sub resource to
 
 Some teams may want to limit what debug image users are allowed to use and to have an audit record for each command they run in the debug container.
 
-You can use the environent variable ```KCTLDBG_RESTRICT_IMAGE_TO``` restrict the agent to using a specific container image.   For example putting the following in the container spec section of your daemonset yaml will force the agent to always use the image ```docker.io/nicolaka/netshoot:latest``` regardless of what the user specifies on the kubectl-debug command line 
+You can use the environment variable ```KCTLDBG_RESTRICT_IMAGE_TO``` restrict the agent to using a specific container image.   For example putting the following in the container spec section of your daemonset yaml will force the agent to always use the image ```docker.io/nicolaka/netshoot:latest``` regardless of what the user specifies on the kubectl-debug command line 
 ```
           env : 
             - name: KCTLDBG_RESTRICT_IMAGE_TO
