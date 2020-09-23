@@ -73,13 +73,15 @@ You may set default configuration such as image and command in the config file, 
 
 	usageError = "expects 'debug POD_NAME' for debug command"
 
-	defaultAgentImage             = "aylei/debug-agent:latest"
-	defaultAgentPodNamePrefix     = "debug-agent-pod"
-	defaultAgentPodNamespace      = "default"
-	defaultAgentPodCpuRequests    = ""
-	defaultAgentPodCpuLimits      = ""
-	defaultAgentPodMemoryRequests = ""
-	defaultAgentPodMemoryLimits   = ""
+	defaultAgentImage               = "aylei/debug-agent:latest"
+	defaultAgentImagePullPolicy     = string(corev1.PullIfNotPresent)
+	defaultAgentImagePullSecretName = ""
+	defaultAgentPodNamePrefix       = "debug-agent-pod"
+	defaultAgentPodNamespace        = "default"
+	defaultAgentPodCpuRequests      = ""
+	defaultAgentPodCpuLimits        = ""
+	defaultAgentPodMemoryRequests   = ""
+	defaultAgentPodMemoryLimits     = ""
 
 	defaultRegistrySecretName      = "kubectl-debug-registry-secret"
 	defaultRegistrySecretNamespace = "default"
@@ -112,8 +114,10 @@ type DebugOptions struct {
 	Fork                bool
 	ForkPodRetainLabels []string
 	//used for agentless mode
-	AgentLess  bool
-	AgentImage string
+	AgentLess                bool
+	AgentImage               string
+	AgentImagePullPolicy     string
+	AgentImagePullSecretName string
 	// agentPodName = agentPodNamePrefix + nodeName
 	AgentPodName      string
 	AgentPodNamespace string
@@ -215,6 +219,10 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		fmt.Sprintf("Whether to turn on agentless mode. Agentless mode: debug target pod if there isn't an agent running on the target host, default to %t", defaultAgentless))
 	cmd.Flags().StringVar(&opts.AgentImage, "agent-image", "",
 		fmt.Sprintf("Agentless mode, the container Image to run the agent container , default to %s", defaultAgentImage))
+	cmd.Flags().StringVar(&opts.AgentImagePullPolicy, "agent-pull-policy", "",
+		fmt.Sprintf("Agentless mode, the container Image pull policy , default to %s", defaultAgentImagePullPolicy))
+	cmd.Flags().StringVar(&opts.AgentImagePullSecretName, "agent-pull-secret-name", "",
+		fmt.Sprintf("Agentless mode, the container Image pull secret name , default to empty"))
 	cmd.Flags().StringVar(&opts.AgentPodName, "agent-pod-name-prefix", "",
 		fmt.Sprintf("Agentless mode, pod name prefix , default to %s", defaultAgentPodNamePrefix))
 	cmd.Flags().StringVar(&opts.AgentPodNamespace, "agent-pod-namespace", "",
@@ -362,6 +370,22 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 			o.AgentImage = config.AgentImage
 		} else {
 			o.AgentImage = defaultAgentImage
+		}
+	}
+
+	if len(o.AgentImagePullPolicy) < 1 {
+		if len(config.AgentImagePullPolicy) > 0 {
+			o.AgentImagePullPolicy = config.AgentImagePullPolicy
+		} else {
+			o.AgentImagePullPolicy = defaultAgentImagePullPolicy
+		}
+	}
+
+	if len(o.AgentImagePullSecretName) < 1 {
+		if len(config.AgentImagePullSecretName) > 0 {
+			o.AgentImagePullSecretName = config.AgentImagePullSecretName
+		} else {
+			o.AgentImagePullSecretName = defaultAgentImagePullSecretName
 		}
 	}
 
@@ -811,11 +835,16 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 		Spec: corev1.PodSpec{
 			HostPID:  true,
 			NodeName: o.AgentPodNode,
+			ImagePullSecrets: []corev1.LocalObjectReference{
+				{
+					Name: o.AgentImagePullSecretName,
+				},
+			},
 			Containers: []corev1.Container{
 				{
 					Name:            "debug-agent",
 					Image:           o.AgentImage,
-					ImagePullPolicy: corev1.PullAlways,
+					ImagePullPolicy: corev1.PullPolicy(o.AgentImagePullPolicy),
 					LivenessProbe: &corev1.Probe{
 						Handler: corev1.Handler{
 							HTTPGet: &corev1.HTTPGetAction{
