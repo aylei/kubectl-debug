@@ -70,7 +70,24 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 	log.Println("receive debug request")
 	containerUri := req.FormValue("container")
 
-	image := req.FormValue("image")
+	sverbosity := req.FormValue("verbosity")
+	if sverbosity == "" {
+		sverbosity = "0"
+	}
+	iverbosity, _ := strconv.Atoi(sverbosity)
+
+	imageFromPlugin := req.FormValue("image")
+	imageFromEnv := os.Getenv("KCTLDBG_RESTRICT_IMAGE_TO")
+	var image string
+	if len(imageFromEnv) > 0 {
+		image = imageFromEnv
+		if imageFromPlugin != imageFromEnv && iverbosity > 0 {
+			log.Printf("Using image %v, specified by env var KCTLDBG_RESTRICT_IMAGE_TO on agent, instead of image %v specified by client.\r\n",
+				imageFromEnv, imageFromPlugin)
+		}
+	} else {
+		image = imageFromPlugin
+	}
 	if len(image) < 1 {
 		http.Error(w, "image must be provided", 400)
 		return
@@ -102,11 +119,6 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 	} else if registrySkipTLSParam == "true" {
 		registrySkipTLS = true
 	}
-	sverbosity := req.FormValue("verbosity")
-	if sverbosity == "" {
-		sverbosity = "0"
-	}
-	iverbosity, _ := strconv.Atoi(sverbosity)
 
 	context, cancel := context.WithCancel(req.Context())
 	defer cancel()

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"encoding/base64"
@@ -11,9 +12,12 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"strings"
 	"sync"
+	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -72,6 +76,9 @@ type RunConfig struct {
 	clientHostName       string
 	clientUserName       string
 	verbosity            int
+	audit                bool
+	auditFifo            string
+	auditShim            []string
 }
 
 func (c *RunConfig) getContextWithTimeout() (context.Context, context.CancelFunc) {
@@ -81,7 +88,7 @@ func (c *RunConfig) getContextWithTimeout() (context.Context, context.CancelFunc
 type ContainerRuntime interface {
 	PullImage(ctx context.Context, image string,
 		skipTLS bool, authStr string,
-		stdout io.WriteCloser) error
+		cfg RunConfig) error
 	ContainerInfo(ctx context.Context, cfg RunConfig) (ContainerInfo, error)
 	RunDebugContainer(cfg RunConfig) error
 }
@@ -94,7 +101,7 @@ var DockerContainerRuntimeImplementsContainerRuntime ContainerRuntime = (*Docker
 
 func (c *DockerContainerRuntime) PullImage(ctx context.Context,
 	image string, skipTLS bool, authStr string,
-	stdout io.WriteCloser) error {
+	cfg RunConfig) error {
 	authBytes := base64.URLEncoding.EncodeToString([]byte(authStr))
 	out, err := c.client.ImagePull(ctx, image, types.ImagePullOptions{RegistryAuth: string(authBytes)})
 	if err != nil {
@@ -102,7 +109,9 @@ func (c *DockerContainerRuntime) PullImage(ctx context.Context,
 	}
 	defer out.Close()
 	// write pull progress to user
-	term.DisplayJSONMessagesStream(out, stdout, 1, true, nil)
+	if cfg.verbosity > 0 {
+		term.DisplayJSONMessagesStream(out, cfg.stdout, 1, true, nil)
+	}
 	return nil
 }
 
@@ -502,20 +511,27 @@ outer:
 func (c *ContainerdContainerRuntime) PullImage(
 	ctx context.Context, image string, skipTLS bool,
 	authStr string,
-	stdout io.WriteCloser) error {
+	cfg RunConfig) error {
 
+	authStr, err := url.QueryUnescape(authStr)
+	if err != nil {
+		log.Printf("Failed to decode authStr: %v\r\n", err)
+		return err
+	}
 	ctx = namespaces.WithNamespace(ctx, KubectlDebugNS)
 
 	ongoing := newJobs(image)
 	pctx, stopProgress := context.WithCancel(ctx)
-	progress := make(chan struct{})
-	go func() {
-		if stdout != nil {
-			// no progress bar, because it hides some debug logs
-			showProgress(pctx, ongoing, c.client.ContentStore(), stdout)
-		}
-		close(progress)
-	}()
+	if cfg.verbosity > 0 {
+		progress := make(chan struct{})
+		go func() {
+			if cfg.stdout != nil {
+				// no progress bar, because it hides some debug logs
+				showProgress(pctx, ongoing, c.client.ContentStore(), cfg.stdout)
+			}
+			close(progress)
+		}()
+	}
 
 	rslvrOpts := docker.ResolverOptions{
 		Tracker: PushTracker,
@@ -526,6 +542,9 @@ func (c *ContainerdContainerRuntime) PullImage(
 	}
 
 	crds := strings.Split(authStr, ":")
+	if cfg.verbosity > 0 {
+		log.Printf("User name for pull : %v\r\n", crds[0])
+	}
 	var useCrds = len(crds) == 2
 	if useCrds || skipTLS {
 		tr := &http.Transport{
@@ -549,7 +568,13 @@ func (c *ContainerdContainerRuntime) PullImage(
 		}
 
 		if useCrds {
+			if cfg.verbosity > 0 {
+				log.Println("Setting credentials call back")
+			}
 			crdsClbck := func(host string) (string, string, error) {
+				if cfg.verbosity > 0 {
+					log.Printf("crdsClbck returning username: %v\r\n", crds[0])
+				}
 				return crds[0], crds[1], nil
 			}
 
@@ -562,7 +587,6 @@ func (c *ContainerdContainerRuntime) PullImage(
 		rmtOpts = append(rmtOpts, containerd.WithResolver(docker.NewResolver(rslvrOpts)))
 	}
 
-	var err error
 	c.image, err = c.client.Pull(ctx, image, rmtOpts...)
 	stopProgress()
 
@@ -653,13 +677,75 @@ func GetPIDNamespace(pid int64) string {
 func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
 	defer c.client.Close()
 
+	uuid := uuid.New().String()
+	fifoNm := ""
+	if cfg.audit {
+		fifoDir, _ := path.Split(cfg.auditFifo)
+		err := os.MkdirAll(fifoDir, 0777)
+		if err != nil {
+			fmt.Printf("Failed to create directory for audit fifos, %v : %v\r\n", fifoDir, err)
+			return err
+		}
+		fifoNm = strings.ReplaceAll(cfg.auditFifo, "KCTLDBG-CONTAINER-ID", uuid)
+		if cfg.verbosity > 0 {
+			log.Printf("Creating fifo %v for receiving audit data.\r\n", fifoNm)
+		}
+		err = syscall.Mkfifo(fifoNm, 0600)
+		if err != nil {
+			fmt.Printf("Failed to create audit fifo %v : %v\r\n", fifoNm, err)
+			return err
+		} else {
+			defer os.Remove(fifoNm)
+		}
+
+		go func() {
+			log.Println("Audit read thread started.")
+			fl, rdErr := os.Open(fifoNm)
+			if rdErr != nil {
+				log.Printf("Audit read thread aborting.  Failed to open fifo : %v\r\n", rdErr)
+				return
+			}
+			log.Println("Audit read thread started.")
+			defer fl.Close()
+			rdr := bufio.NewReader(fl)
+			var ln []byte
+			for {
+				ln, _, rdErr = rdr.ReadLine()
+				if rdErr != nil {
+					break
+				}
+				log.Printf("audit - user: %v debugee: %v exec: %v\r\n", cfg.clientUserName,
+					cfg.idOfContainerToDebug, string(ln))
+			}
+			if rdErr != nil {
+				if rdErr == io.EOF {
+					log.Printf("EOF reached while reading from %v.  Audit read thread exiting.\r\n", fifoNm)
+				} else {
+					log.Printf("Error %v while reading from %v.  Audit read thread exiting.\r\n", rdErr, fifoNm)
+				}
+			}
+		}()
+	}
+	// If audit, create thread for reading from fifo, defer clean up of thread
 	ctx := namespaces.WithNamespace(cfg.context, KubectlDebugNS)
 
 	var spcOpts []oci.SpecOpts
 	spcOpts = append(spcOpts, oci.WithImageConfig(c.image))
 	spcOpts = append(spcOpts, oci.WithPrivileged)
-	spcOpts = append(spcOpts, oci.WithProcessArgs(cfg.command...))
+	// if audit, build command vector array using shim + cfg.command
+	// Make sure to replace KCTLDBG-FIFO with the actual fifo path ( Or maybe that is done before we get this far )
+	if cfg.audit {
+		cmd := append([]string(nil), cfg.auditShim...)
+		for i, s := range cmd {
+			cmd[i] = strings.ReplaceAll(s, "KCTLDBG-FIFO", fifoNm)
+		}
+		cmd = append(cmd, cfg.command...)
+		spcOpts = append(spcOpts, oci.WithProcessArgs(cmd...))
+	} else {
+		spcOpts = append(spcOpts, oci.WithProcessArgs(cfg.command...))
+	}
 	spcOpts = append(spcOpts, oci.WithTTY)
+	// If fifo, make sure fifo is bind mounted
 	trgtInf, err := c.ContainerInfo(ctx, cfg)
 	if err != nil {
 		log.Printf("Failed to get a pid from target container %s : %v\r\n",
@@ -670,6 +756,16 @@ func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
 		Type: specs.NetworkNamespace,
 		Path: GetNetworkNamespace(trgtInf.Pid),
 	}))
+
+	if fifoNm != "" {
+		kbctlDbgMnt := specs.Mount{
+			Destination: fifoNm,
+			Source:      fifoNm,
+			Type:        "bind",
+			Options:     []string{"bind", "rw"},
+		}
+		spcOpts = append(spcOpts, oci.WithMounts([]specs.Mount{kbctlDbgMnt}))
+	}
 	// 2020-04-21 d :
 	// Tried setting the user namespace without success.
 	// - If I just use WithLinuxNamespace and don't use WithUserNamespace
@@ -696,7 +792,6 @@ func (c *ContainerdContainerRuntime) RunDebugContainer(cfg RunConfig) error {
 		Type: specs.PIDNamespace,
 		Path: GetPIDNamespace(trgtInf.Pid),
 	}))
-	uuid := uuid.New().String()
 	cntnr, err := c.client.NewContainer(
 		ctx,
 		// Was using "dbg-[idOfContainerToDebug]" but this meant that you couldn't use multiple debug containers for the same debugee
@@ -823,6 +918,11 @@ type DebugAttacher struct {
 	stopListenEOF chan struct{}
 	context       context.Context
 	cancel        context.CancelFunc
+
+	// audit options
+	audit     bool
+	auditFifo string
+	auditShim []string
 }
 
 var DebugAttacherImplementsAttacher kubeletremote.Attacher = (*DebugAttacher)(nil)
@@ -851,6 +951,9 @@ func (a *DebugAttacher) AttachContainer(name string, uid kubetype.UID, container
 		clientHostName:       a.clientHostName,
 		clientUserName:       a.clientUserName,
 		verbosity:            a.verbosity,
+		audit:                a.audit,
+		auditFifo:            a.auditFifo,
+		auditShim:            a.auditShim,
 	})
 }
 
@@ -904,12 +1007,8 @@ func (m *DebugAttacher) DebugContainer(cfg RunConfig) error {
 	if cfg.verbosity > 0 {
 		cfg.stdout.Write([]byte(fmt.Sprintf("pulling image %s, skip TLS %v... \n\r", m.image, m.registrySkipTLS)))
 	}
-	ioForPull := cfg.stdout
-	if cfg.verbosity < 1 {
-		ioForPull = nil
-	}
 	err := m.containerRuntime.PullImage(m.context, m.image,
-		m.registrySkipTLS, m.authStr, ioForPull)
+		m.registrySkipTLS, m.authStr, cfg)
 	if err != nil {
 		return err
 	}
@@ -960,6 +1059,9 @@ type RuntimeManager struct {
 	containerScheme      ContainerRuntimeScheme
 	clientHostName       string
 	clientUserName       string
+	audit                bool
+	auditFifo            string
+	auditShim            []string
 }
 
 func NewRuntimeManager(srvCfg Config, containerUri string, verbosity int,
@@ -1023,6 +1125,9 @@ func NewRuntimeManager(srvCfg Config, containerUri string, verbosity int,
 		containerScheme:      containerScheme,
 		clientHostName:       hstNm,
 		clientUserName:       usrNm,
+		audit:                srvCfg.Audit,
+		auditFifo:            srvCfg.AuditFifo,
+		auditShim:            srvCfg.AuditShim,
 	}, nil
 }
 
@@ -1056,5 +1161,8 @@ func (m *RuntimeManager) GetAttacher(image, authStr string,
 		stopListenEOF:        make(chan struct{}),
 		clientHostName:       m.clientHostName,
 		clientUserName:       m.clientUserName,
+		audit:                m.audit,
+		auditFifo:            m.auditFifo,
+		auditShim:            m.auditShim,
 	}
 }
