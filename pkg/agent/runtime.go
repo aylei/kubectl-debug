@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -102,8 +103,26 @@ var DockerContainerRuntimeImplementsContainerRuntime ContainerRuntime = (*Docker
 func (c *DockerContainerRuntime) PullImage(ctx context.Context,
 	image string, skipTLS bool, authStr string,
 	cfg RunConfig) error {
-	authBytes := base64.URLEncoding.EncodeToString([]byte(authStr))
-	out, err := c.client.ImagePull(ctx, image, types.ImagePullOptions{RegistryAuth: string(authBytes)})
+	// Verify that we have a valid Docker AuthConfig and try to make one out of a
+	// username:password-style authStr if not.
+	if authStr != "" {
+		var authConfig types.AuthConfig
+		authBytes := []byte(authStr)
+		if err := json.Unmarshal(authBytes, &authConfig); err != nil {
+			crds := strings.Split(authStr, ":")
+			if len(crds) == 2 {
+				authConfig = types.AuthConfig{
+					Username: crds[0],
+					Password: crds[1],
+				}
+				authBytes, _ = json.Marshal(authConfig)
+			} else {
+				return fmt.Errorf("Failed to parse authStr '%s': %v", authStr, err)
+			}
+		}
+		authStr = base64.URLEncoding.EncodeToString(authBytes)
+	}
+	out, err := c.client.ImagePull(ctx, image, types.ImagePullOptions{RegistryAuth: authStr})
 	if err != nil {
 		return err
 	}
