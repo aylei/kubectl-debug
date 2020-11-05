@@ -184,10 +184,10 @@ command:
 - '/bin/bash'
 - '-l'
 # private docker registry auth kuberntes secret
-# default RegistrySecretName is kubectl-debug-registry-secret
-# default namspace is default
-RegistrySecretName: my-debug-secret
-RegistrySecretNamespace: debug
+# default registrySecretName is kubectl-debug-registry-secret
+# default registrySecretNamespace is default
+registrySecretName: my-debug-secret
+registrySecretNamespace: debug
 # in agentless mode, you can set the agent pod's resource limits/requests:
 # default is not set
 agentCpuRequests: ""
