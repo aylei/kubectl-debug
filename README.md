@@ -108,18 +108,19 @@ kubectl-debug POD_NAME --image calmkart/netshoot:latest --registry-secret-name <
 kubectl-debug POD_NAME --agent-pod-cpu-requests=250m --agent-pod-cpu-limits=500m --agent-pod-memory-requests=200Mi --agent-pod-memory-limits=500Mi
 ```
 
-Example:
-```bash
-# how to create a private docker registry secret
-# take the user name 'calmkart' password 'calmkart' as an example
-# refer to the official kubernetes documentation for more ways to create
-# https://kubernetes.io/docs/concepts/configuration/secret/
-echo -n '{Username: calmkart, Password: calmkart}' > ./registrySecret.txt
-kubectl create secret generic kubectl-debug-registry-secret --from-file=./registrySecret.txt
-```
-
 * You can configure the default arguments to simplify usage, refer to [Configuration](#configuration)
 * Refer to [Examples](/docs/examples.md) for practical debugging examples
+
+## (Optional) Create a Secret for Use with Private Docker Registries
+
+The secret must have the key `authStr` and a JSON payload containing a `Username` and `Password`. For example:
+
+```bash
+echo -n '{"Username": "calmkart", "Password": "calmkart"}' > ./authStr
+kubectl create secret generic kubectl-debug-registry-secret --from-file=./authStr
+```
+
+Refer to [the official Kubernetes documentation on Secrets](https://kubernetes.io/docs/concepts/configuration/secret/) for more ways to create them.
 
 # Build from source
 
@@ -184,10 +185,10 @@ command:
 - '/bin/bash'
 - '-l'
 # private docker registry auth kuberntes secret
-# default RegistrySecretName is kubectl-debug-registry-secret
-# default namspace is default
-RegistrySecretName: my-debug-secret
-RegistrySecretNamespace: debug
+# default registrySecretName is kubectl-debug-registry-secret
+# default registrySecretNamespace is default
+registrySecretName: my-debug-secret
+registrySecretNamespace: debug
 # in agentless mode, you can set the agent pod's resource limits/requests:
 # default is not set
 agentCpuRequests: ""
