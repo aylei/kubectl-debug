@@ -20,6 +20,7 @@ import (
 
 	term "github.com/aylei/kubectl-debug/pkg/util"
 	dockerterm "github.com/docker/docker/pkg/term"
+	"github.com/rs/xid"
 	"github.com/spf13/cobra"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -860,7 +861,9 @@ func copyAndStripPod(pod *corev1.Pod, targetContainer string, podLabels map[stri
 		ObjectMeta: *pod.ObjectMeta.DeepCopy(),
 		Spec:       *pod.Spec.DeepCopy(),
 	}
-	copied.Name = fmt.Sprintf("%s-%s-debug", pod.Name, uuid.NewUUID())
+	// Using original pod name + xid + debug ad copied pod name. To ensure a
+	// valid pod name we truncate original pod name to keep the total chars <64
+	copied.Name = fmt.Sprintf("%.34s-%s-debug", pod.Name, xid.New().String())
 	copied.Labels = podLabels
 	copied.Spec.RestartPolicy = corev1.RestartPolicyNever
 	for i, c := range copied.Spec.Containers {
