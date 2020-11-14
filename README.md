@@ -113,7 +113,16 @@ kubectl-debug POD_NAME --agent-pod-cpu-requests=250m --agent-pod-cpu-limits=500m
 
 ## (Optional) Create a Secret for Use with Private Docker Registries
 
-The secret must have the key `authStr` and a JSON payload containing a `Username` and `Password`. For example:
+You can use a new or existing [Kubernetes `dockerconfigjson` secret](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/#registry-secret-existing-credentials). For example:
+
+```bash
+# Be sure to run "docker login" beforehand.
+kubectl create secret generic kubectl-debug-registry-secret \
+    --from-file=.dockerconfigjson=<path/to/.docker/config.json> \
+    --type=kubernetes.io/dockerconfigjson
+```
+
+Alternatively, you can create a secret with the key `authStr` and a JSON payload containing a `Username` and `Password`. For example:
 
 ```bash
 echo -n '{"Username": "calmkart", "Password": "calmkart"}' > ./authStr
