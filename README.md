@@ -9,15 +9,15 @@
 
 `kubectl-debug` is an 'out-of-tree' solution for connecting to, and troubleshooting, an existing, running, 'target' container in an existing pod in a Kubernetes cluster.
 The target container may have a shell and busybox utils and hence provide some debug capability. or it may be very minimal and not even provide a shell - which makes real-time troubleshooting very difficult. kubectl-debug is designed to overcome that difficulty.
-
+  
 How does it work?
-0 - User invokes kubectl-debug like this: kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME
-1 - kubectl-debug connects to kubectl and launches a new 'debug-agent' container on the same node as the 'target' container.
+0 - User invokes kubectl-debug like this: kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME  
+1 - kubectl-debug connects to kubectl and launches a new 'debug-agent' container on the same node as the 'target' container.  
 2 - debug-agent container connects direct to containerd (or dockerd if applicable) on the host which is running the 'target' container and launches a new 'debug' container. in the same `pid`, `network`, `user` and `ipc` namespaces as the target container.
-4 - 'debug-agent' redirects the terminal output of the 'debug' container to the 'kubectl-debug' executable and so you can interact directly with the shell running in the debug container and so you can use all your favorite troubleshooting tools available in the debug container (BASH, cURL, tcpdump, etc) without the need to have these utilities in the target container image.
-
+4 - 'debug-agent' redirects the terminal output of the 'debug' container to the 'kubectl-debug' executable and so you can interact directly with the shell running in the debug container and so you can use all your favorite troubleshooting tools available in the debug container (BASH, cURL, tcpdump, etc) without the need to have these utilities in the target container image.  
+  
 kubectl-debug is not related to 'kubectl debug'
-
+  
 `kubectl-debug` has been replaced by kubernetes [ephemeral containers](https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers). At the time of writing, ephemeral containers are still in alpha (Kubernetes current release is 1.22.4). You are required to explicitly enable alpha features (alpha features are not enabled by default). If you are using Azure AKS (and perhaps others) you are not able, nor permitted, to configure kubernetes feature flags and so you will need a solution like the one provided by this github project.
 
 
