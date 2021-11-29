@@ -1,19 +1,18 @@
 # Kubectl-debug
 
 ![license](https://img.shields.io/hexpm/l/plug.svg)
-[![travis](https://travis-ci.org/aylei/kubectl-debug.svg?branch=master)](https://travis-ci.org/aylei/kubectl-debug)
-[![Go Report Card](https://goreportcard.com/badge/github.com/aylei/kubectl-debug)](https://goreportcard.com/report/github.com/aylei/kubectl-debug)
-[![docker](https://img.shields.io/docker/pulls/aylei/debug-agent.svg)](https://hub.docker.com/r/aylei/debug-agent)
+[![Go Report Card](https://goreportcard.com/badge/github.com/jamesTGrant/kubectl-debug)](https://goreportcard.com/report/github.com/aylei/kubectl-debug)
+[![docker](https://img.shields.io/docker/pulls/jamesgrantmediakind/debug-agent.svg)](https://hub.docker.com/r/jamesgrantmediakind/debug-agent)
 
-[简体中文](/docs/zh-cn.md)
 
 # Overview
 
-`kubectl-debug` is an out-of-tree solution for [troubleshooting running pods](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/node/troubleshoot-running-pods.md), which allows you to run a new container in running pods for debugging purpose ([examples](/docs/examples.md)). The new container will join the `pid`, `network`, `user` and `ipc` namespaces of the target container, so you can use arbitrary trouble-shooting tools without pre-installing them in your production container image.
+`kubectl-debug` is an 'out-of-tree' solution for [troubleshooting running pods](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/node/troubleshoot-running-pods.md), which launches a new 'debug' container within an existing pod. The 'debug container' attaches to a specific (pre-existing) container. The debug-container  will join the `pid`, `network`, `user` and `ipc` namespaces of the target container, so you can use all your favorite trouble-shooting tools (BASH, cURL, tcpdump, etc) without needed to have these utilities in the target container image.
+
+kubectl-debug is not related to 'kubectl debug'
 
 - [Kubectl-debug](#kubectl-debug)
 - [Overview](#overview)
-- [Screenshots](#screenshots)
 - [Quick Start](#quick-start)
   - [Install the kubectl debug plugin](#install-the-kubectl-debug-plugin)
   - [(Optional) Install the debug agent DaemonSet](#optional-install-the-debug-agent-daemonset)
@@ -26,50 +25,21 @@
 - [Contribute](#contribute)
 - [Acknowledgement](#acknowledgement)
 
-# Screenshots
-
-![gif](/docs/kube-debug.gif)
 
 # Quick Start
 
-## Install the kubectl debug plugin
-
-Homebrew:
-```shell
-brew install aylei/tap/kubectl-debug
-```
-
-Download the binary:
+Download the binary (Linux only):
 ```bash
-export PLUGIN_VERSION=0.1.1
+export RELEASE_VERSION=1.0.0
 # linux x86_64
-curl -Lo kubectl-debug.tar.gz https://github.com/aylei/kubectl-debug/releases/download/v${PLUGIN_VERSION}/kubectl-debug_${PLUGIN_VERSION}_linux_amd64.tar.gz
-# macos
-curl -Lo kubectl-debug.tar.gz https://github.com/aylei/kubectl-debug/releases/download/v${PLUGIN_VERSION}/kubectl-debug_${PLUGIN_VERSION}_darwin_amd64.tar.gz
+curl -Lo kubectl-debug.tar.gz https://github.com/JamesTGrant/kubectl-debug/releases/download/v${RELEASE_VERSION}/kubectl-debug_${RELEASE_VERSION}_linux_amd64.tar.gz
 
 tar -zxvf kubectl-debug.tar.gz kubectl-debug
+chmod +x kubectl-debug
 sudo mv kubectl-debug /usr/local/bin/
+
 ```
 
-For windows users, download the latest archive from the [release page](https://github.com/aylei/kubectl-debug/releases/tag/v0.1.1), decompress the package and add it to your PATH.
-
-## (Optional) Install the debug agent DaemonSet
-
-`kubectl-debug` requires an agent pod to communicate with the container runtime. In the [agentless mode](#port-forward-mode-And-agentless-mode), the agent pod can be created when a debug session starts and to be cleaned up when the session ends.(Turn on agentless mode by default)
-
-While convenient, creating pod before debugging can be time consuming. You can install the debug agent DaemonSet and use --agentless=false params in advance to skip this:
-
-```bash
-# if your kubernetes version is v1.16 or newer
-kubectl apply -f https://raw.githubusercontent.com/aylei/kubectl-debug/master/scripts/agent_daemonset.yml
-# if your kubernetes is old version(<v1.16), you should change the apiVersion to extensions/v1beta1, As follows
-wget https://raw.githubusercontent.com/aylei/kubectl-debug/master/scripts/agent_daemonset.yml
-sed -i '' '1s/apps\/v1/extensions\/v1beta1/g' agent_daemonset.yml
-kubectl apply -f agent_daemonset.yml
-# or using helm
-helm install kubectl-debug -n=debug-agent ./contrib/helm/kubectl-debug
-# use daemonset agent mode(close agentless mode)
-kubectl debug --agentless=false POD_NAME
 ```
 
 ## Debug instructions
@@ -260,42 +230,14 @@ Where USERNAME is the kubernetes user as determined by the client that launched 
 <dd>String array that will be placed before the command that will be run in the debug container.  The default value is <code>{"/usr/bin/strace", "-o", "KCTLDBG-FIFO", "-f", "-e", "trace=/exec"}</code>.  The agent will replace KCTLDBG-FIFO with the fifo path ( see above )  If auditing is enabled then agent will use the concatenation of the array specified by <code>audit_shim</code> and the original command array it was going to use.</dd>
 </dl>
 
-The easiest way to enable auditing is to define a config map in the yaml you use to deploy the deamonset.   You can do this by place 
-```
-apiVersion : v1
-kind: ConfigMap 
-metadata: 
-  name : kubectl-debug-agent-config
-data: 
-  agent-config.yml: |  
-    audit: true
----    
-```
-at the top of the file, adding a ```configmap``` volume like so
-```
-        - name: config
-          configMap:
-            name: kubectl-debug-agent-config
-```
-and a volume mount like so
-```
-            - name: config
-              mountPath: "/etc/kubectl-debug/agent-config.yml"
-              subPath: agent-config.yml
+T
 ```
 .
 
-
 # Roadmap
 
-`kubectl-debug` is supposed to be just a troubleshooting helper, and is going be replaced by the native `kubectl debug` command when [this proposal](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/node/troubleshoot-running-pods.md) is implemented and merged in the future kubernetes release. But for now, there is still some works to do to improve `kubectl-debug`.
+`kubectl-debug` has been replaced by kubernetes [ephemeral containers](https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers). At the time of writing, ephemeral containers are still in alpha (Kubernetes current release is 1.22.4). You are required to explicitly enable alpha features (alpha features are not enabled by default). If you are using Azure AKS (and perhaps others) you are not able, nor permitted, to configure kubernetes feature flags and so you will need a solution like the one provided by this github project.
 
-- [ ] Security: currently, `kubectl-debug` do authorization in the client-side, which should be moved to the server-side (debug-agent)
-- [ ] More unit tests
-- [ ] More real world debugging example
-- [ ] e2e tests
-
-If you are interested in any of the above features, please file an issue to avoid potential duplication.
 
 # Contribute
 
@@ -303,4 +245,4 @@ Feel free to open issues and pull requests. Any feedback is highly appreciated!
 
 # Acknowledgement
 
-This project would not be here without the effort of [our contributors](https://github.com/aylei/kubectl-debug/graphs/contributors), thanks!
+This project is a fork of (from what I think is abandonware) it would not be here without the effort of [our contributors](https://github.com/aylei/kubectl-debug/graphs/contributors), thanks!
