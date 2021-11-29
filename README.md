@@ -7,18 +7,27 @@
 
 # Overview
 
-`kubectl-debug` is an 'out-of-tree' solution for [troubleshooting running pods](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/node/troubleshoot-running-pods.md), which launches a new 'debug' container within an existing pod. The 'debug container' attaches to a specific (pre-existing) container. The debug-container  will join the `pid`, `network`, `user` and `ipc` namespaces of the target container, so you can use all your favorite trouble-shooting tools (BASH, cURL, tcpdump, etc) without needed to have these utilities in the target container image.
+`kubectl-debug` is an 'out-of-tree' solution for connecting to, and troubleshooting, an existing, running, 'target' container in an existing pod in a Kubernetes cluster.
+The target container may have a shell and busybox utils and hence provide some debug capability. or it may be very minimal and not even provide a shell - which makes real-time troubleshooting very difficult. kubectl-debug is designed to overcome that difficulty.
+
+How does it work?
+0 - User invokes kubectl-debug like this: kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME
+1 - kubectl-debug connects to kubectl and launches a new 'debug-agent' container on the same node as the 'target' container.
+2 - debug-agent container connects direct to containerd (or dockerd if applicable) on the host which is running the 'target' container and launches a new 'debug' container. in the same `pid`, `network`, `user` and `ipc` namespaces as the target container.
+4 - 'debug-agent' redirects the terminal output of the 'debug' container to the 'kubectl-debug' executable and so you can interact directly with the shell running in the debug container and so you can use all your favorite troubleshooting tools available in the debug container (BASH, cURL, tcpdump, etc) without the need to have these utilities in the target container image.
 
 kubectl-debug is not related to 'kubectl debug'
+
+`kubectl-debug` has been replaced by kubernetes [ephemeral containers](https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers). At the time of writing, ephemeral containers are still in alpha (Kubernetes current release is 1.22.4). You are required to explicitly enable alpha features (alpha features are not enabled by default). If you are using Azure AKS (and perhaps others) you are not able, nor permitted, to configure kubernetes feature flags and so you will need a solution like the one provided by this github project.
+
 
 - [Kubectl-debug](#kubectl-debug)
 - [Overview](#overview)
 - [Quick Start](#quick-start)
   - [Install the kubectl debug plugin](#install-the-kubectl-debug-plugin)
-  - [(Optional) Install the debug agent DaemonSet](#optional-install-the-debug-agent-daemonset)
   - [Debug instructions](#debug-instructions)
 - [Build from source](#build-from-source)
-- [port-forward mode And agentless mode(Default opening)](#port-forward-mode-and-agentless-modedefault-opening)
+- [port-forward mode and agentless mode(Default opening)](#port-forward-mode-and-agentless-modedefault-opening)
 - [Configuration](#configuration)
 - [Authorization](#authorization)
 - [Roadmap](#roadmap)
@@ -37,49 +46,47 @@ curl -Lo kubectl-debug.tar.gz https://github.com/JamesTGrant/kubectl-debug/relea
 tar -zxvf kubectl-debug.tar.gz kubectl-debug
 chmod +x kubectl-debug
 sudo mv kubectl-debug /usr/local/bin/
-
 ```
 
-```
-
-## Debug instructions
+## Usage instructions
 
 Try it out!
 
 ```bash
 # kubectl 1.12.0 or higher
-kubectl debug -h
-# if you installed the debug agent's daemonset, you can use --agentless=false to speed up the startup.
-# the default agentless mode will be used in following commands
-kubectl debug POD_NAME
+kubectl-debug -h
+
+# start the debug container in the same namespace, and cgroup etc as container 'CONTAINER_NAME' in pod 'POD_NAME' in namespace 'NAMESPACE'
+kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME
 
 # in case of your pod stuck in `CrashLoopBackoff` state and cannot be connected to,
 # you can fork a new pod and diagnose the problem in the forked pod
-kubectl debug POD_NAME --fork
+kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --fork
 
-# in fork mode, if you want the copied pod retains the labels of the original pod, you can use the --fork-pod-retain-labels parameter to set(comma separated, and spaces are not allowed)
-# Example is as follows
-# If not set, this parameter is empty by default (Means that any labels of the original pod are not retained, and the labels of the copied pods are empty.)
-kubectl debug POD_NAME --fork --fork-pod-retain-labels=<labelKeyA>,<labelKeyB>,<labelKeyC>
+# In 'fork' mode, if you want the copied pod to retain the labels of the original pod, you can use the --fork-pod-retain-labels parameter (comma separated, no spaces). If not set (default), this parameter is empty and so any labels of the original pod are not retained, and the labels of the copied pods are empty.
+# Example of fork mode:
+kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --fork --fork-pod-retain-labels=<labelKeyA>,<labelKeyB>,<labelKeyC>
 
-# in order to enable node without public IP or direct access (firewall and other reasons) to access, port-forward mode is enabled by default.
-# if you don't need to turn on port-forward mode, you can use --port-forward false to turn off it.
-kubectl debug POD_NAME --port-forward=false --agentless=false --daemonset-ns=kube-system --daemonset-name=debug-agent
+# in order to interact with the debug-agent pod on a node which doesn't have a public IP or direct access (firewall and other reasons) to access, port-forward mode is enabled by default. if you don't want port-forward mode, you can use --port-forward false to turn off it. I don't know why you'd want to do this, but you can if you want.
+kubectl-debug --port-forward=false --namespace NAMESPACE POD_NAME -c CONTAINER_NAME
 
-# old versions of kubectl cannot discover plugins, you may execute the binary directly
-kubectl-debug POD_NAME
 
-# use primary docker registry, set registry kubernets secret to pull image
+# you can choose a different debug container image. By default, nicolaka/netshoot:latest will be used but you can specify anything you like
+kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --image nicolaka/netshoot:latest 
+
+# you can set the debug-agent pod's resource limits/requests, for example:
+# default is not set
+kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --agent-pod-cpu-requests=250m --agent-pod-cpu-limits=500m --agent-pod-memory-requests=200Mi --agent-pod-memory-limits=500Mi
+
+# use primary docker registry, set registry kubernetes secret to pull image
 # the default registry-secret-name is kubectl-debug-registry-secret, the default namespace is default
 # please set the secret data source as {Username: <username>, Password: <password>}
-kubectl-debug POD_NAME --image calmkart/netshoot:latest --registry-secret-name <k8s_secret_name> --registry-secret-namespace <namespace>
-# in default agentless mode, you can set the agent pod's resource limits/requests, for example:
-# default is not set
-kubectl-debug POD_NAME --agent-pod-cpu-requests=250m --agent-pod-cpu-limits=500m --agent-pod-memory-requests=200Mi --agent-pod-memory-limits=500Mi
+kubectl-debug --namespace NAMESPACE POD_NAME --image nicolaka/netshoot:latest --registry-secret-name <k8s_secret_name> --registry-secret-namespace <namespace>
+
+
 ```
 
 * You can configure the default arguments to simplify usage, refer to [Configuration](#configuration)
-* Refer to [Examples](/docs/examples.md) for practical debugging examples
 
 ## (Optional) Create a Secret for Use with Private Docker Registries
 
@@ -105,22 +112,20 @@ Refer to [the official Kubernetes documentation on Secrets](https://kubernetes.i
 
 Clone this repo and:
 ```bash
-# make will build plugin binary and debug-agent image
+# make will build kubectl-debug binary and debug-agent image
 make
 # install plugin
 mv kubectl-debug /usr/local/bin
 
-# build plugin only
-make plugin
+# build debug-agent executable only - you wont need this. This is the executable that the debug-agent container contains. The dockerfile of the debug-agent container refers to this
+
 # build agent only
 make agent-docker
 ```
 
 # port-forward mode And agentless mode(Default opening)
 
-- `port-foward` mode: By default, `kubectl-debug` will directly connect with the target host. When `kubectl-debug` cannot connect to `targetHost:agentPort`, you can enable `port-forward` mode. In `port-forward` mode, the local machine listens on `localhost:agentPort` and forwards data to/from `targetPod:agentPort`.
-
-- `agentless` mode: By default, `debug-agent` needs to be pre-deployed on each node of the cluster, which consumes cluster resources all the time. Unfortunately, debugging Pod is a low-frequency operation. To avoid loss of cluster resources, the `agentless` mode has been added in [#31](https://github.com/aylei/kubectl-debug/pull/31). In `agentless` mode, `kubectl-debug` will first start `debug-agent` on the host where the target Pod is located, and then `debug-agent`  starts the debug container. After the user exits, `kubectl-debug` will delete the debug container and `kubectl-debug` will delete the `debug-agent` pod at last.
+- `agentless` mode: By default, `debug-agent` will first start the `debug-agent` pod on the host where the target Pod is located, and then `debug-agent` pod will start the debug container. After the user exits, `kubectl-debug` will delete the debug container and `kubectl-debug` will delete the `debug-agent` pod.
 
 # Configuration
 
@@ -185,8 +190,6 @@ registrySkipTLSVerify: false
 verbosity : 0
 ```
 
-If the debug-agent is not accessible from host port, it is recommended to set `portForward: true` to using port-forawrd mode.
-
 PS: `kubectl-debug` will always override the entrypoint of the container, which is by design to avoid users running an unwanted service by mistake(of course you can always do this explicitly).
 
 # Authorization
@@ -245,4 +248,4 @@ Feel free to open issues and pull requests. Any feedback is highly appreciated!
 
 # Acknowledgement
 
-This project is a fork of (from what I think is abandonware) it would not be here without the effort of [our contributors](https://github.com/aylei/kubectl-debug/graphs/contributors), thanks!
+This project is a fork of (from what I think is abandonware) [this project](https://github.com/aylei/kubectl-debug) it would not be here without the effort of [aylei contributors](https://github.com/aylei/kubectl-debug/graphs/contributors), thanks!
