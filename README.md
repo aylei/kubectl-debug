@@ -13,10 +13,10 @@ The target container may have a shell and busybox utils and hence provide some d
 How does it work?  
 0 - User invokes kubectl-debug like this: `kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME`  
 1 - kubectl-debug connects to kubectl and launches a new 'debug-agent' container on the same node as the 'target' container.  
-2 - debug-agent container connects direct to containerd (or dockerd if applicable) on the host which is running the 'target' container and launches a new 'debug' container. in the same `pid`, `network`, `user` and `ipc` namespaces as the target container.  
-3 - 'debug-agent' redirects the terminal output of the 'debug' container to the 'kubectl-debug' executable and so you can interact directly with the shell running in the debug container and so you can use all your favorite troubleshooting tools available in the debug container (BASH, cURL, tcpdump, etc) without the need to have these utilities in the target container image.  
+2 - debug-agent container connects direct to containerd (or dockerd if applicable) on the host which is running the 'target' container and launches a new 'debug' container in the same `pid`, `network`, `user` and `ipc` namespaces as the target container.  
+3 - 'debug-agent' redirects the terminal output of the 'debug' container to the 'kubectl-debug' executable and so you can interact directly with the shell running in the debug container. You can now use of the troubleshooting tools available in the debug container (BASH, cURL, tcpdump, etc) without the need to have these utilities in the target container image.  
   
-kubectl-debug is not related to 'kubectl debug'
+`kubectl-debug` is not related to `kubectl debug`
   
 `kubectl-debug` has been replaced by kubernetes [ephemeral containers](https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers). At the time of writing, ephemeral containers are still in alpha (Kubernetes current release is 1.22.4). You are required to explicitly enable alpha features (alpha features are not enabled by default). If you are using Azure AKS (and perhaps others) you are not able, nor permitted, to configure kubernetes feature flags and so you will need a solution like the one provided by this github project.
 
@@ -24,10 +24,10 @@ kubectl-debug is not related to 'kubectl debug'
 - [Kubectl-debug](#kubectl-debug)
 - [Overview](#overview)
 - [Quick Start](#quick-start)
-  - [Install the kubectl debug plugin](#install-the-kubectl-debug-plugin)
-  - [Debug instructions](#debug-instructions)
+  - [Download the binary](#download-the-binary)
+  - [Usage instructions](#usage-instructions)
+  - [(Optional) Create a Secret for use with Private Docker Registries](#create-a-secret-for-use-with-private-docker-registries)
 - [Build from source](#build-from-source)
-- [port-forward mode and agentless mode(Default opening)](#port-forward-mode-and-agentless-modedefault-opening)
 - [Configuration](#configuration)
 - [Authorization](#authorization)
 - [Roadmap](#roadmap)
@@ -37,7 +37,8 @@ kubectl-debug is not related to 'kubectl debug'
 
 # Quick Start
 
-Download the binary (Linux only):
+## Download the binary 
+(I'm testing Linux only):
 ```bash
 export RELEASE_VERSION=1.0.0
 # linux x86_64
@@ -112,20 +113,19 @@ Refer to [the official Kubernetes documentation on Secrets](https://kubernetes.i
 
 Clone this repo and:
 ```bash
-# make will build kubectl-debug binary and debug-agent image
+# make will build kubectl-debug binary and debug-agent docker image 
 make
-# install plugin
+# 'install' binary
+chmod +x kubectl-debug
 mv kubectl-debug /usr/local/bin
 
 # build debug-agent executable only - you wont need this. This is the executable that the debug-agent container contains. The dockerfile of the debug-agent container refers to this
+make debug-agent
 
-# build agent only
-make agent-docker
+# build debug-agent and the debug-agent docker image. The container image `jamesgrantmediakind/debug-agent:latest` will be created
+make debug-agent-docker-image
+
 ```
-
-# port-forward mode And agentless mode(Default opening)
-
-- `agentless` mode: By default, `debug-agent` will first start the `debug-agent` pod on the host where the target Pod is located, and then `debug-agent` pod will start the debug container. After the user exits, `kubectl-debug` will delete the debug container and `kubectl-debug` will delete the `debug-agent` pod.
 
 # Configuration
 
