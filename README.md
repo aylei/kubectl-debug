@@ -1,7 +1,7 @@
 # Kubectl-debug
 
 ![license](https://img.shields.io/hexpm/l/plug.svg)
-[![Go Report Card](https://goreportcard.com/badge/github.com/jamesTGrant/kubectl-debug)](https://goreportcard.com/report/github.com/aylei/kubectl-debug)
+[![Go Report Card](https://goreportcard.com/badge/github.com/jamesTGrant/kubectl-debug)](https://goreportcard.com/report/github.com/jamesTGrant/kubectl-debug)
 [![docker](https://img.shields.io/docker/pulls/jamesgrantmediakind/debug-agent.svg)](https://hub.docker.com/r/jamesgrantmediakind/debug-agent)
 
 
