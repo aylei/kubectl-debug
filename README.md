@@ -19,6 +19,9 @@
 
 # Overview
 
+This project is a fork of this fine project: https://github.com/aylei/kubectl-debug
+I have made several changes which may never be accepted as a PR on that [project](https://github.com/aylei/kubectl-debug) (hence this fork). The credit for this project belongs with [aylei](https://github.com/aylei)
+
 `kubectl-debug` is an 'out-of-tree' solution for connecting to and troubleshooting an existing, running, 'target' container in an existing pod in a Kubernetes cluster.
 The target container may have a shell and busybox utils and hence provide some debug capability or it may be very minimal and not even provide a shell - which makes any real-time troubleshooting/debugging very difficult. kubectl-debug is designed to overcome that difficulty.
 
