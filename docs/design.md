@@ -2,8 +2,8 @@
 
 `kubectl-debug` consists of 3 components:
 
-* the 'kubectl-debug' executable: serves `kubectl-debug` command and interfaces with the kube-api-server
-* the 'debug-agent' which is a temporary pod that is started in the cluster by kubectl-debug. The 'debug-agent' container is responsible for starting and manipulating the 'debug container'. The 'debug-agent' will also act as a websockets relay for remote tty to join the output of the 'debug container' to the terminal from which the kubectl-debug command was issued.
+* the 'kubectl-debug' executable serves the `kubectl-debug` command and interfaces with the kube-api-server
+* the 'debug-agent' pod is a temporary pod that is started in the cluster by kubectl-debug. The 'debug-agent' container is responsible for starting and manipulating the 'debug container'. The 'debug-agent' will also act as a websockets relay for remote tty to join the output of the 'debug container' to the terminal from which the kubectl-debug command was issued
 * the 'debug container' which is the container that provides the debugging utilities and the shell in which the human user performs their debugging activity. `kubectl-debug` doesn't provide this - it's an 'off-the-shelf container image (nicolaka/netshoot:latest by default), it is invoked and configured by 'debug-agent'.
 
 When user runs `kubectl-debug --namespace <namespace> <target-pod> -c <container-name>`
