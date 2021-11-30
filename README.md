@@ -11,7 +11,7 @@
   - [(Optional) Create a Secret for use with Private Docker Registries](#create-a-secret-for-use-with-private-docker-registries)
 - [Build from source](#build-from-source)
 - [Configuration options and over-rides](#configuration-options-and-over-rides)
-- [Authorization](#authorization)
+- [Authorization / required privileges](#authorization-required-privileges)
 - [Roadmap](#roadmap)
 - [Contribute](#contribute)
 - [Acknowledgement](#acknowledgement)
@@ -200,11 +200,12 @@ registrySkipTLSVerify: false
 # You can set the debug logging output level with the verbosity setting. There are two levels of verbosity, 0 and any positive integer (ie; 'verbosity : 1' will produce the same debug output as 'verbosity : 5')
 verbosity : 0
 ```
-# Authorization
+# Authorization / required privileges
 
 Put simply - if you can successfully issue the command `kubectl exec` to a container in your cluster then `kubectl-debug` will work for you!
 Detail: `kubectl-debug` reuses the privilege of the `pod/exec` sub-resource to do authorization, which means that it has the same privilege requirements as the `kubectl exec` command. 
 
+The processes in the debug-agent container run as root and the debug-agent container is configured with 'privileged: true' - some clusters (such as OpenShift) may not allow either of these practices by default.
 
 # Auditing / Security
 
