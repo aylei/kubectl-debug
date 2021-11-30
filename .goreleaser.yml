@@ -21,7 +21,7 @@ builds:
     - goos: darwin
       goarch: 386
   ldflags:
-    - -s -w -X 'github.com/aylei/kubectl-debug/version.gitVersion={{.Version}}'
+    - -s -w -X 'github.com/jamestgrant/kubectl-debug/version.gitVersion={{.Version}}'
 checksum:
   name_template: 'checksums.txt'
 snapshot:
@@ -34,12 +34,12 @@ changelog:
     - '^test:'
 brew:
   github:
-    owner: aylei
+    owner: jamestgrant
     name: homebrew-tap
   commit_author:
-    name: aylei
-    email: rayingecho@gmail.com
+    name: jamestgrant
+    email: jamesrgrant@mediakind.com
   install: |
     bin.install "kubectl-debug"
-  homepage: "https://www.github.com/aylei/kubectl-debug"
-  description: "Debug your pod by a new container with every troubleshooting tools pre-installed"
+  homepage: "https://www.github.com/jamestgrant/kubectl-debug"
+  description: "Debug a troublesome container using a dubug container which contains all your favorite troubleshooting tools pre-installed and runs in the same cgroup/ipc/network namespace as your troublesome container"
