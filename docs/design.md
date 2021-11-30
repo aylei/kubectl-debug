@@ -6,7 +6,7 @@
 * the 'debug-agent' pod is a temporary pod that is started in the cluster by kubectl-debug. The 'debug-agent' container is responsible for starting and manipulating the 'debug container'. The 'debug-agent' will also act as a websockets relay for remote tty to join the output of the 'debug container' to the terminal from which the kubectl-debug command was issued
 * the 'debug container' which is the container that provides the debugging utilities and the shell in which the human user performs their debugging activity. `kubectl-debug` doesn't provide this - it's an 'off-the-shelf container image (nicolaka/netshoot:latest by default), it is invoked and configured by 'debug-agent'.
 
-When user runs `kubectl-debug --namespace <namespace> <target-pod> -c <container-name>`
+The following occurs when the user runs the command: `kubectl-debug --namespace <namespace> <target-pod> -c <container-name>` 
 
 1. 'kubectl-debug' gets the target-pod info from kube-api-server and extracts the `host` information (the target-pod within the namespace <namespace>)
 2. 'kubectl-debug' sends a 'debug-agent' pod specification to kube-api-server with a node-selector matching the `host`
