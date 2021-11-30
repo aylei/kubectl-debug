@@ -21,6 +21,9 @@
 
 `kubectl-debug` is an 'out-of-tree' solution for connecting to, and troubleshooting, an existing, running, 'target' container in an existing pod in a Kubernetes cluster.
 The target container may have a shell and busybox utils and hence provide some debug capability. or it may be very minimal and not even provide a shell - which makes real-time troubleshooting very difficult. kubectl-debug is designed to overcome that difficulty.
+
+This project is a fork of this fine [project](https://github.com/aylei/kubectl-debug). I have made several changes to this project which I suspect will never be accepted as a PR on that [project](https://github.com/aylei/kubectl-debug) as it seems to be no longer maintained (hence this fork).
+
   
 How does it work?  
 <dd>
@@ -205,7 +208,7 @@ verbosity : 0
 Put simply - if you can successfully issue the command `kubectl exec` to a container in your cluster then `kubectl-debug` will work for you!
 Detail: `kubectl-debug` reuses the privilege of the `pod/exec` sub-resource to do authorization, which means that it has the same privilege requirements as the `kubectl exec` command. 
 
-The processes in the debug-agent container run as `root` and the debug-agent container is configured with `privileged: true` - some clusters (such as OpenShift) may not allow either of these practices by default.
+The processes in the debug-agent container run as `root` and the debug-agent container is configured with `privileged: true` Some clusters (such as OpenShift) may not allow either of these practices by default.
 
 # Auditing / Security
 
@@ -241,14 +244,14 @@ Where USERNAME is the kubernetes user as determined by the client that launched 
 
 # Roadmap
 
-`kubectl-debug` has been replaced by kubernetes [ephemeral containers](https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers). At the time of writing, ephemeral containers are still in alpha (Kubernetes current release is 1.22.4). You are required to explicitly enable alpha features (alpha features are not enabled by default). If you are using Azure AKS (and perhaps others) you are not able, nor permitted, to configure kubernetes feature flags and so you will need a solution like the one provided by this github project.
+`kubectl-debug` has been replaced by kubernetes [ephemeral containers](https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers). At the time of writing, ephemeral containers feature is still in alpha (Kubernetes current release is 1.22.4). In Kuberenetes, by default, you are required to explicitly enable alpha features (alpha features are not enabled by default). If you are using Azure AKS (and perhaps others) you are not able, nor permitted, to configure kubernetes feature flags and so you will need a solution like the one provided by this github project.
 
 
 # Contribute
 
-I'm currently working on this as a fork of this fine [project](https://github.com/aylei/kubectl-debug). I am making several changes and I suspect it'll never be accepted as a PR on that project hence this fork.
-Feel free to open issues and pull requests. Any feedback is highly appreciated!
+Feel free to open issues and pull requests. Any feedback is much appreciated!
 
 # Acknowledgement
 
-This project is a fork of [this project](https://github.com/aylei/kubectl-debug) which I think is no longer maintained (hence this fork). This project would not be here without the effort of [aylei contributors](https://github.com/aylei/kubectl-debug/graphs/contributors) and [this fork](https://github.com/JamesTGrant/kubectl-debug/graphs/contributors)
+This project is a fork of [this project](https://github.com/aylei/kubectl-debug) which I think is no longer maintained (hence this fork).
+This project would not be here without the effort of [aylei contributors](https://github.com/aylei/kubectl-debug/graphs/contributors) and [this fork](https://github.com/JamesTGrant/kubectl-debug/graphs/contributors)

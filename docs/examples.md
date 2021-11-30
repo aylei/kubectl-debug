@@ -2,33 +2,22 @@
 
 This guide will walk-through the typical debugging workflow of `kubectl-debug`.
 
-> **Note:** The rest of this document assumes you have installed and properly configured `kubectl-debug` according to the [Project REAMDE](/README.md).
+> **Note:** The rest of this document assumes you have installed and properly configured `kubectl-debug` according to the [Project README.md](/README.md).
 
 If you have any real world examples to share with `kubectl-debug`, feel free to open a pull request.
 
-Here's the config file for the following commands for you to re-produce all the command outputs:
-
-```yaml
-agent_port: 10027
-portForward: true
-agentless: true
-command:
-- '/bin/bash'
-- '-l'
-```
-
 ## Basic
 
-`kubectl-debug` use [`nicolaka/netshoot`](https://github.com/nicolaka/netshoot) as the default debug image, the [project document](https://github.com/nicolaka/netshoot/blob/master/README.md) is a great guide about using various tools to troubleshoot your container network. 
+`kubectl-debug` uses [`nicolaka/netshoot`](https://github.com/nicolaka/netshoot) as the default debug image, the [project document](https://github.com/nicolaka/netshoot/blob/master/README.md) is a great guide about using various tools to troubleshoot your container network. 
 
-We will take a few examples here to show how does the powerful `netshoot` work in the `kubectl-debug` context:
+Here are a few examples to show `netshoot` working with `kubectl-debug`:
 
 Connect to pod:
 
 ```shell
-➜  ~ kubectl debug demo-pod
+➜  ~ kubectl-debug demo-pod
 
-Agent Pod info: [Name:debug-agent-pod-da46a000-8429-11e9-a40c-8c8590147766, Namespace:default, Image:aylei/debug-agent:latest, HostPort:10027, ContainerPort:10027]
+Agent Pod info: [Name:debug-agent-pod-da46a000-8429-11e9-a40c-8c8590147766, Namespace:default, Image:jamesgrantmediakind/debug-agent:latest, HostPort:10027, ContainerPort:10027]
 Waiting for pod debug-agent-pod-da46a000-8429-11e9-a40c-8c8590147766 to run...
 pod demo-pod PodIP 10.233.111.78, agentPodIP 172.16.4.160
 wait for forward port to debug agent ready...
@@ -123,8 +112,8 @@ Under the hood, `kubectl debug --fork` will copy the entire Pod spec and:
 Here's an example:
 
 ```shell
-➜  ~ kubectl debug demo-pod --fork
-Agent Pod info: [Name:debug-agent-pod-dea9e7c8-8439-11e9-883a-8c8590147766, Namespace:default, Image:aylei/debug-agent:latest, HostPort:10027, ContainerPort:10027]
+➜  ~ kubectl-debug demo-pod --fork
+Agent Pod info: [Name:debug-agent-pod-dea9e7c8-8439-11e9-883a-8c8590147766, Namespace:default, Image:jamesgrantmediakind/debug-agent:latest, HostPort:10027, ContainerPort:10027]
 Waiting for pod debug-agent-pod-dea9e7c8-8439-11e9-883a-8c8590147766 to run...
 Waiting for pod demo-pod-e23c1b68-8439-11e9-883a-8c8590147766-debug to run...
 pod demo-pod PodIP 10.233.111.90, agentPodIP 172.16.4.160
@@ -168,5 +157,5 @@ root @ /
 Just like debugging the ordinary container, we can debug the init-container of Pod. In this case, you must specify the container name of init-container:
 
 ```shell
-➜  ~ kubectl debug demo-pod --container=init-pod
+➜  ~ kubectl-debug demo-pod --container=init-pod
 ```
