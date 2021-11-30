@@ -197,12 +197,12 @@ forkPodRetainLabels: []
 # setting registrySkipTLSVerify to true.
 registrySkipTLSVerify: false
 
-# You can set the debug logging output level with the verbosity setting. There are two levels of verbosity, 0 and any positive integer (ie; setting '1' will produce the same debug output as '5')
+# You can set the debug logging output level with the verbosity setting. There are two levels of verbosity, 0 and any positive integer (ie; 'verbosity : 1' will produce the same debug output as 'verbosity : 5')
 verbosity : 0
 ```
 # Authorization
 
-Put simply, if you can successfully issue the command `kubectl exec` to a container in your cluster then `kubectl-debug` will work for you!
+Put simply - if you can successfully issue the command `kubectl exec` to a container in your cluster then `kubectl-debug` will work for you!
 Detail: `kubectl-debug` reuses the privilege of the `pod/exec` sub-resource to do authorization, which means that it has the same privilege requirements as the `kubectl exec` command. 
 
 
