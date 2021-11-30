@@ -15,7 +15,7 @@ How does it work?
 <ol>
 <li> - User invokes kubectl-debug like this: <code>kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME</code></li>
 <li> - kubectl-debug communicates with the cluster using the same interface as kubectl and instructs kubernetes to request the launch of a new 'debug-agent' container on the same node as the 'target' container </li>
-<li> - debug-agent container connects directly to containerd (or dockerd if applicable) on the host which is running the 'target' container and launches a new 'debug' container in the same <code>pid`, <code>network</code>, <code>user</code> and <code>ipc</code> namespaces as the target container </li>
+<li> - debug-agent container connects directly to containerd (or dockerd if applicable) on the host which is running the 'target' container and launches a new 'debug' container in the same <code>pid</code>, <code>network</code>, <code>user</code> and <code>ipc</code> namespaces as the target container </li>
 <li> - 'debug-agent' pod redirects the terminal output of the 'debug' container to the 'kubectl-debug' executable and so you can interact directly with the shell running in the 'debug' container. You can now use of the troubleshooting tools available in the debug container (BASH, cURL, tcpdump, etc) without the need to have these utilities in the target container image.</li>
 </ol>
 </dd>
