@@ -141,7 +141,7 @@ The `debug-agent` uses [nicolaka/netshoot](https://github.com/nicolaka/netshoot)
 ```bash
 kubectl-debug --configfile CONFIGFILE --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME
 ```
-
+Example configfile:
 ```yaml
 # debug agent listening port (outside container)
 # default: 10027
