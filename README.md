@@ -11,10 +11,14 @@
 The target container may have a shell and busybox utils and hence provide some debug capability. or it may be very minimal and not even provide a shell - which makes real-time troubleshooting very difficult. kubectl-debug is designed to overcome that difficulty.
   
 How does it work?  
-0 - User invokes kubectl-debug like this: `kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME`  
-1 - kubectl-debug connects to kubectl and launches a new 'debug-agent' container on the same node as the 'target' container.  
-2 - debug-agent container connects direct to containerd (or dockerd if applicable) on the host which is running the 'target' container and launches a new 'debug' container in the same `pid`, `network`, `user` and `ipc` namespaces as the target container.  
-3 - 'debug-agent' redirects the terminal output of the 'debug' container to the 'kubectl-debug' executable and so you can interact directly with the shell running in the debug container. You can now use of the troubleshooting tools available in the debug container (BASH, cURL, tcpdump, etc) without the need to have these utilities in the target container image.  
+<dd>
+<ol>
+<li> - User invokes kubectl-debug like this: `kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME`</li>
+<li> - kubectl-debug connects to kubectl and launches a new 'debug-agent' container on the same node as the 'target' container </li>
+<li> - debug-agent container connects direct to containerd (or dockerd if applicable) on the host which is running the 'target' container and launches a new 'debug' container in the same `pid`, `network`, `user` and `ipc` namespaces as the target container </li>
+<li> - 'debug-agent' redirects the terminal output of the 'debug' container to the 'kubectl-debug' executable and so you can interact directly with the shell running in the debug container. You can now use of the troubleshooting tools available in the debug container (BASH, cURL, tcpdump, etc) without the need to have these utilities in the target container image.</li>
+</ol>
+</dd>
   
 `kubectl-debug` is not related to `kubectl debug`
   
@@ -28,7 +32,7 @@ How does it work?
   - [Usage instructions](#usage-instructions)
   - [(Optional) Create a Secret for use with Private Docker Registries](#create-a-secret-for-use-with-private-docker-registries)
 - [Build from source](#build-from-source)
-- [Configuration](#configuration)
+- [Configuration options and over-rides](#configuration-options-and-over-rides)
 - [Authorization](#authorization)
 - [Roadmap](#roadmap)
 - [Contribute](#contribute)
@@ -55,6 +59,8 @@ Try it out!
 
 ```bash
 # kubectl 1.12.0 or higher
+
+# print the help
 kubectl-debug -h
 
 # start the debug container in the same namespace, and cgroup etc as container 'CONTAINER_NAME' in pod 'POD_NAME' in namespace 'NAMESPACE'
@@ -71,7 +77,6 @@ kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --fork --fork-pod
 # in order to interact with the debug-agent pod on a node which doesn't have a public IP or direct access (firewall and other reasons) to access, port-forward mode is enabled by default. if you don't want port-forward mode, you can use --port-forward false to turn off it. I don't know why you'd want to do this, but you can if you want.
 kubectl-debug --port-forward=false --namespace NAMESPACE POD_NAME -c CONTAINER_NAME
 
-
 # you can choose a different debug container image. By default, nicolaka/netshoot:latest will be used but you can specify anything you like
 kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --image nicolaka/netshoot:latest 
 
@@ -86,8 +91,8 @@ kubectl-debug --namespace NAMESPACE POD_NAME --image nicolaka/netshoot:latest --
 
 
 ```
+* You can pass a config file if you which to use non-default values for various things. Please refer to [Configuration](#configuration) for details.
 
-* You can configure the default arguments to simplify usage, refer to [Configuration](#configuration)
 
 ## (Optional) Create a Secret for Use with Private Docker Registries
 
@@ -113,104 +118,107 @@ Refer to [the official Kubernetes documentation on Secrets](https://kubernetes.i
 
 Clone this repo and:
 ```bash
-# make will build kubectl-debug binary and debug-agent docker image 
+# make will build kubectl-debug binary, debug-agent binary and a docker image which includes the debug-agent binary
+# to use this kubectl-debug utility you only need to take the resultant kubectl-debug binary file. (The docker image used by the kubectl-debug is pre-built (from a release of this project) and is (by default) pulled from dockerhub.)
 make
+
 # 'install' binary
 chmod +x kubectl-debug
 mv kubectl-debug /usr/local/bin
 
-# build debug-agent executable only - you wont need this. This is the executable that the debug-agent container contains. The dockerfile of the debug-agent container refers to this
-make debug-agent
+## 
+# build debug-agent executable only - you wont need this. This is the executable that the debug-agent container contains. The dockerfile of the debug-agent container refers to this binary.
+make debug-agent-binary
 
-# build debug-agent and the debug-agent docker image. The container image `jamesgrantmediakind/debug-agent:latest` will be created
+# build debug-agent binary and the debug-agent docker image. The docker container image `jamesgrantmediakind/debug-agent:latest` will be created locally to the build process.
 make debug-agent-docker-image
 
 ```
 
-# Configuration
+# Configuration options and over-rides
 
-`kubectl-debug` uses [nicolaka/netshoot](https://github.com/nicolaka/netshoot) as the default image to run debug container, and use `bash` as default entrypoint.
-
-You can override the default image and entrypoint with cli flag, or even better, with config file `~/.kube/debug-config`:
+The `debug-agent` uses [nicolaka/netshoot](https://github.com/nicolaka/netshoot) as the default image to run debug container, and use `bash` as default entrypoint. You can override the default image and entrypoint, as well as a number of other useful things, by passing the config file to the kubectl-debug command like this:
+```bash
+kubectl-debug --configfile CONFIGFILE --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME
+```
 
 ```yaml
-# debug agent listening port(outside container)
-# default to 10027
+# debug agent listening port (outside container)
+# default: 10027
 agentPort: 10027
 
-# whether using agentless mode
-# default to true
-agentless: true
-# namespace of debug-agent pod, used in agentless mode
-# default to 'default'
+# namespace of debug-agent pod (does'nt need to be in the same namespace as the target container)
+# default: 'default'
 agentPodNamespace: default
-# prefix of debug-agent pod, used in agentless mode
-# default to  'debug-agent-pod'
-agentPodNamePrefix: debug-agent-pod
-# image of debug-agent pod, used in agentless mode
-# default to 'aylei/debug-agent:latest'
-agentImage: aylei/debug-agent:latest
 
-# daemonset name of the debug-agent, used in port-forward
-# default to 'debug-agent'
-debugAgentDaemonset: debug-agent
-# daemonset namespace of the debug-agent, used in port-forwad
-# default to 'default'
-debugAgentNamespace: kube-system
+# prefix of debug-agent pod
+# default: 'debug-agent-pod'
+agentPodNamePrefix: debug-agent-pod
+
+# image of debug-agent pod
+# default: jamesgrantmediakind/debug-agent:latest
+agentImage: jamesgrantmediakind/debug-agent:latest
+
+# auditing can be enabled by setting 'audit' to 'true'
+# default: false
+audit: false
+
 # whether using port-forward when connecting debug-agent
-# default true
+# default: true
 portForward: true
+
 # image of the debug container
-# default as showed
+# default: nicolaka/netshoot:latest
 image: nicolaka/netshoot:latest
+
 # start command of the debug container
+# `kubectl-debug` always specifies this explicitly and you can not override this without making code changes to `kubectl-debug`) this is by design.
 # default ['bash']
 command:
 - '/bin/bash'
 - '-l'
-# private docker registry auth kuberntes secret
-# default registrySecretName is kubectl-debug-registry-secret
-# default registrySecretNamespace is default
+
+# private docker registry auth kubernetes secret
+# default registrySecretName: kubectl-debug-registry-secret
+# default registrySecretNamespace: default
 registrySecretName: my-debug-secret
 registrySecretNamespace: debug
-# in agentless mode, you can set the agent pod's resource limits/requests:
+
+# you can set the agent pod's resource limits/requests:
 # default is not set
 agentCpuRequests: ""
 agentCpuLimits: ""
 agentMemoryRequests: ""
 agentMemoryLimits: ""
+
 # in fork mode, if you want the copied pod retains the labels of the original pod, you can change this params
 # format is []string
 # If not set, this parameter is empty by default (Means that any labels of the original pod are not retained, and the labels of the copied pods are empty.)
 forkPodRetainLabels: []
+
 # You can disable SSL certificate check when communicating with image registry by 
 # setting registrySkipTLSVerify to true.
 registrySkipTLSVerify: false
-# You can set the log level with the verbosity setting
+
+# You can set the debug logging output level with the verbosity setting. There are two levels of verbosity, 0 and any positive integer (ie; setting '1' will produce the same debug output as '5')
 verbosity : 0
 ```
 
-PS: `kubectl-debug` will always override the entrypoint of the container, which is by design to avoid users running an unwanted service by mistake(of course you can always do this explicitly).
-
 # Authorization
 
-Currently, `kubectl-debug` reuse the privilege of the `pod/exec` sub resource to do authorization, which means that it has the same privilege requirements with the `kubectl exec` command.
+Put simply, if you can successfully issue the command `kubectl exec` to a container in your cluster then `kubectl-debug` will work for you!
+Detail: `kubectl-debug` reuses the privilege of the `pod/exec` sub-resource to do authorization, which means that it has the same privilege requirements as the `kubectl exec` command. 
 
 # Auditing / Security
 
 Some teams may want to limit what debug image users are allowed to use and to have an audit record for each command they run in the debug container.
 
-You can use the environment variable ```KCTLDBG_RESTRICT_IMAGE_TO``` restrict the agent to using a specific container image.   For example putting the following in the container spec section of your daemonset yaml will force the agent to always use the image ```docker.io/nicolaka/netshoot:latest``` regardless of what the user specifies on the kubectl-debug command line 
+You can add ```KCTLDBG_RESTRICT_IMAGE_TO``` to the config file to restrict the debug-agent to use a specific container image. For example putting the following in the config file will force the agent to always use the image ```docker.io/nicolaka/netshoot:latest``` regardless of what the user specifies on the kubectl-debug command line. This may be helpful for restrictive environments that mandate the use of ```KCTLDBG_RESTRICT_IMAGE_TO```
 ```
-          env : 
-            - name: KCTLDBG_RESTRICT_IMAGE_TO
-              value: docker.io/nicolaka/netshoot:latest
+KCTLDBG_RESTRICT_IMAGE_TO: docker.io/nicolaka/netshoot:latest
 ```
-If ```KCTLDBG_RESTRICT_IMAGE_TO``` is set and as a result agent is using an image that is different than what the user requested then the agent will log to standard out a message that announces what is happening.   The message will include the URI's of both images.
+If ```KCTLDBG_RESTRICT_IMAGE_TO``` is set and as a result agent is using an image that is different than what the user requested then the agent will log to standard out a message that announces what is happening.  The message will include the URI's of both images.
 
-Auditing can be enabled by placing 
-```audit: true```
-in the agent's config file.  
 
 There are 3 settings related to auditing.
 <dl>
@@ -235,7 +243,7 @@ Where USERNAME is the kubernetes user as determined by the client that launched 
 
 T
 ```
-.
+
 
 # Roadmap
 
@@ -244,8 +252,9 @@ T
 
 # Contribute
 
+I'm currently working on this as a fork of this fine [project](https://github.com/aylei/kubectl-debug). I am making several changes and I suspect it'll never be accepted as a PR on that project hence this fork.
 Feel free to open issues and pull requests. Any feedback is highly appreciated!
 
 # Acknowledgement
 
-This project is a fork of (from what I think is abandonware) [this project](https://github.com/aylei/kubectl-debug) it would not be here without the effort of [aylei contributors](https://github.com/aylei/kubectl-debug/graphs/contributors), thanks!
+This project is a fork of [this project](https://github.com/aylei/kubectl-debug) which I think is no longer maintained (hence this fork). This project would not be here without the effort of [aylei contributors](https://github.com/aylei/kubectl-debug/graphs/contributors) and [this fork](https://github.com/JamesTGrant/kubectl-debug/graphs/contributors)
