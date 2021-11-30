@@ -16,6 +16,7 @@
 - [Contribute](#contribute)
 - [Acknowledgement](#acknowledgement)
 
+
 # Overview
 
 `kubectl-debug` is an 'out-of-tree' solution for connecting to, and troubleshooting, an existing, running, 'target' container in an existing pod in a Kubernetes cluster.
@@ -49,6 +50,7 @@ tar -zxvf kubectl-debug.tar.gz kubectl-debug
 chmod +x kubectl-debug
 sudo mv kubectl-debug /usr/local/bin/
 ```
+
 
 ## Usage instructions
 
@@ -110,7 +112,6 @@ kubectl create secret generic kubectl-debug-registry-secret --from-file=./authSt
 ```
 
 Refer to [the official Kubernetes documentation on Secrets](https://kubernetes.io/docs/concepts/configuration/secret/) for more ways to create them.
-
 # Build from source
 
 Clone this repo and:
@@ -131,7 +132,6 @@ make debug-agent-binary
 make debug-agent-docker-image
 
 ```
-
 # Configuration options and over-rides
 
 The `debug-agent` uses [nicolaka/netshoot](https://github.com/nicolaka/netshoot) as the default image to run debug container, and uses `bash` as default entrypoint. You can override the default image and entrypoint, as well as a number of other useful things, by passing the config file to the kubectl-debug command like this:
@@ -200,11 +200,11 @@ registrySkipTLSVerify: false
 # You can set the debug logging output level with the verbosity setting. There are two levels of verbosity, 0 and any positive integer (ie; setting '1' will produce the same debug output as '5')
 verbosity : 0
 ```
-
 # Authorization
 
 Put simply, if you can successfully issue the command `kubectl exec` to a container in your cluster then `kubectl-debug` will work for you!
 Detail: `kubectl-debug` reuses the privilege of the `pod/exec` sub-resource to do authorization, which means that it has the same privilege requirements as the `kubectl exec` command. 
+
 
 # Auditing / Security
 
@@ -215,7 +215,6 @@ You can add ```KCTLDBG_RESTRICT_IMAGE_TO``` to the config file to restrict the d
 KCTLDBG_RESTRICT_IMAGE_TO: docker.io/nicolaka/netshoot:latest
 ```
 If ```KCTLDBG_RESTRICT_IMAGE_TO``` is set and as a result agent is using an image that is different than what the user requested then the agent will log to standard out a message that announces what is happening.  The message will include the URI's of both images.
-
 
 There are 3 settings related to auditing.
 <dl>
@@ -237,9 +236,6 @@ Where USERNAME is the kubernetes user as determined by the client that launched 
 <dt><code>audit_shim</code>
 <dd>String array that will be placed before the command that will be run in the debug container.  The default value is <code>{"/usr/bin/strace", "-o", "KCTLDBG-FIFO", "-f", "-e", "trace=/exec"}</code>.  The agent will replace KCTLDBG-FIFO with the fifo path ( see above )  If auditing is enabled then agent will use the concatenation of the array specified by <code>audit_shim</code> and the original command array it was going to use.</dd>
 </dl>
-
-T
-```
 
 
 # Roadmap
