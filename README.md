@@ -209,7 +209,7 @@ verbosity : 0
 Put simply - if you can successfully issue the command `kubectl exec` to a container in your cluster then `kubectl-debug` will work for you!
 Detail: `kubectl-debug` reuses the privilege of the `pod/exec` sub-resource to do authorization, which means that it has the same privilege requirements as the `kubectl exec` command. 
 
-The processes in the debug-agent container run as `root` and the debug-agent container is configured with `privileged: true` Some clusters (such as OpenShift) may not allow either of these practices by default.
+The processes in the debug-agent container run as `root` and the debug-agent container `securityContext` is configured with `privileged: true` Some clusters such as OpenShift may not, by default, allow either of these practices.
 
 # Auditing / Security
 
