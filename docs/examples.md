@@ -4,18 +4,18 @@ This guide will walk-through the typical debugging workflow of `kubectl-debug`.
 
 > **Note:** The rest of this document assumes you have installed and properly configured `kubectl-debug` according to the [Project README.md](/README.md).
 
-If you have any real world examples to share with `kubectl-debug`, feel free to open a pull request.
+
 
 ## Basic
 
-`kubectl-debug` uses [`nicolaka/netshoot`](https://github.com/nicolaka/netshoot) as the default debug image, the [project document](https://github.com/nicolaka/netshoot/blob/master/README.md) is a great guide about using various tools to troubleshoot your container network. 
+`kubectl-debug` uses [`nicolaka/netshoot`](https://github.com/nicolaka/netshoot) as the default debug image, the netshoot [project document](https://github.com/nicolaka/netshoot/blob/master/README.md) is a great guide about using various tools to troubleshoot your container environment.
 
 Here are a few examples to show `netshoot` working with `kubectl-debug`:
 
-Connect to pod:
+Connect to a running container 'demo-container' in pod 'demo-pod' in the default namespace:
 
 ```shell
-➜  ~ kubectl-debug demo-pod
+➜  ~ kubectl-debug demo-pod -c demo-container
 
 Agent Pod info: [Name:debug-agent-pod-da46a000-8429-11e9-a40c-8c8590147766, Namespace:default, Image:jamesgrantmediakind/debug-agent:latest, HostPort:10027, ContainerPort:10027]
 Waiting for pod debug-agent-pod-da46a000-8429-11e9-a40c-8c8590147766 to run...
@@ -32,7 +32,7 @@ starting debug container...
 container created, open tty...
 
  [1] 🐳  → hostname
-demo-pod
+demo-container
 ```
 
 Using **iftop** to inspect network traffic:
@@ -83,10 +83,7 @@ root @ /
 
 ### `proc` filesystem and FUSE
 
-It is common to use tools like `top`, `free` to inspect system metrics like CPU usage and memory. Unfortunately, these commands will display the metrics from the host system by default. Because they read the metrics from the `proc` filesystem (`/proc/*`), which is mounted from the host system.
-
-While this is acceptable (you can still inspect the metrics of container process in the host metrics), this can be misleading and 
-counter-intuitive. A common solution is using a [FUSE](https://en.wikipedia.org/wiki/Filesystem_in_Userspace) filesystem, which is out of the scope of `kubectl-debug` plugin.
+It is common to use tools like `top`, `free` to inspect system metrics like CPU usage and memory. Using these commands will display the metrics from the host system by default. Because they read the metrics from the `proc` filesystem (`/proc/*`), which is mounted from the host system. This can be extremely useful (you can still inspect the pod/container metrics of as part of the host metrics)
 
 You may find [this blog post](https://fabiokung.com/2014/03/13/memory-inside-linux-containers/) useful if you want to investigate this problem in depth.
 
@@ -102,17 +99,17 @@ Hello, world!
 
 ## Debug Pod in "CrashLoopBackoff"
 
-Troubleshooting `CrashLoopBackoff` of Kubernetes Pod can be tricky. The debug container process will be reaped once the target container (process with pid 1) exists. To tackle with this, `kubectl-debug` provides the `--fork` flag, which borrow the idea from the `oc debug` command: copy the currently Pod and re-produce the issue in the forked Pod.
+Troubleshooting kubernetes containers in the  `CrashLoopBackoff` state can be tricky. Using kubectl-debug 'normally' probably wont help you as the debug container processed will be terminated reaped once the target container (process with pid 1) exits. To tackle with this, `kubectl-debug` provides the `--fork` flag, which borrows the idea from the `oc debug` command: copy the currently crashing pod and (hopefully) the issue will reproduce in the forked Pod with the added ability to debug via the debug container.
 
 Under the hood, `kubectl debug --fork` will copy the entire Pod spec and:
 
-* strip all the labels, so that no traffic will be routed from service to this pod;
+* strip all the labels, so that no traffic will be routed from service to this pod (see[Readme.md](/README.md) for instructions on duplicating the labels);
 * modify the entry-point of target container in order to hold the pid namespace and avoid the Pod crash again;
 
 Here's an example:
 
 ```shell
-➜  ~ kubectl-debug demo-pod --fork
+➜  ~ kubectl-debug demo-pod -c demo-container --fork
 Agent Pod info: [Name:debug-agent-pod-dea9e7c8-8439-11e9-883a-8c8590147766, Namespace:default, Image:jamesgrantmediakind/debug-agent:latest, HostPort:10027, ContainerPort:10027]
 Waiting for pod debug-agent-pod-dea9e7c8-8439-11e9-883a-8c8590147766 to run...
 Waiting for pod demo-pod-e23c1b68-8439-11e9-883a-8c8590147766-debug to run...
@@ -154,8 +151,8 @@ root @ /
 
 ## Debug init container
 
-Just like debugging the ordinary container, we can debug the init-container of Pod. In this case, you must specify the container name of init-container:
+Just like debugging the ordinary container, we can debug the init-container of a pod. You must specify the container name of init-container:
 
 ```shell
-➜  ~ kubectl-debug demo-pod --container=init-pod
+➜  ~ kubectl-debug demo-pod -c init-container
 ```
