@@ -13,16 +13,16 @@ The target container may have a shell and busybox utils and hence provide some d
 How does it work?  
 <dd>
 <ol>
-<li> - User invokes kubectl-debug like this: `kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME`</li>
-<li> - kubectl-debug connects to kubectl and launches a new 'debug-agent' container on the same node as the 'target' container </li>
-<li> - debug-agent container connects direct to containerd (or dockerd if applicable) on the host which is running the 'target' container and launches a new 'debug' container in the same `pid`, `network`, `user` and `ipc` namespaces as the target container </li>
-<li> - 'debug-agent' redirects the terminal output of the 'debug' container to the 'kubectl-debug' executable and so you can interact directly with the shell running in the debug container. You can now use of the troubleshooting tools available in the debug container (BASH, cURL, tcpdump, etc) without the need to have these utilities in the target container image.</li>
+<li> - User invokes kubectl-debug like this: <code>kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME</code></li>
+<li> - kubectl-debug communicates with the cluster using the same interface as kubectl and instructs kubernetes to request the launch of a new 'debug-agent' container on the same node as the 'target' container </li>
+<li> - debug-agent container connects directly to containerd (or dockerd if applicable) on the host which is running the 'target' container and launches a new 'debug' container in the same <code>pid`, <code>network</code>, <code>user</code> and <code>ipc</code> namespaces as the target container </li>
+<li> - 'debug-agent' pod redirects the terminal output of the 'debug' container to the 'kubectl-debug' executable and so you can interact directly with the shell running in the 'debug' container. You can now use of the troubleshooting tools available in the debug container (BASH, cURL, tcpdump, etc) without the need to have these utilities in the target container image.</li>
 </ol>
 </dd>
   
 `kubectl-debug` is not related to `kubectl debug`
   
-`kubectl-debug` has been replaced by kubernetes [ephemeral containers](https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers). At the time of writing, ephemeral containers are still in alpha (Kubernetes current release is 1.22.4). You are required to explicitly enable alpha features (alpha features are not enabled by default). If you are using Azure AKS (and perhaps others) you are not able, nor permitted, to configure kubernetes feature flags and so you will need a solution like the one provided by this github project.
+`kubectl-debug` has been largely replaced by kubernetes [ephemeral containers](https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers). At the time of writing, ephemeral containers are still in alpha (Kubernetes current release is 1.22.4). You are required to explicitly enable alpha features (alpha features are not enabled by default). If you are using Azure AKS (and perhaps others) you are not able, nor permitted, to configure kubernetes feature flags and so you will need a solution like the one provided by this github project.
 
 
 - [Kubectl-debug](#kubectl-debug)
@@ -137,7 +137,7 @@ make debug-agent-docker-image
 
 # Configuration options and over-rides
 
-The `debug-agent` uses [nicolaka/netshoot](https://github.com/nicolaka/netshoot) as the default image to run debug container, and use `bash` as default entrypoint. You can override the default image and entrypoint, as well as a number of other useful things, by passing the config file to the kubectl-debug command like this:
+The `debug-agent` uses [nicolaka/netshoot](https://github.com/nicolaka/netshoot) as the default image to run debug container, and uses `bash` as default entrypoint. You can override the default image and entrypoint, as well as a number of other useful things, by passing the config file to the kubectl-debug command like this:
 ```bash
 kubectl-debug --configfile CONFIGFILE --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME
 ```
