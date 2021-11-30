@@ -4,6 +4,17 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/jamesTGrant/kubectl-debug)](https://goreportcard.com/report/github.com/jamesTGrant/kubectl-debug)
 [![docker](https://img.shields.io/docker/pulls/jamesgrantmediakind/debug-agent.svg)](https://hub.docker.com/r/jamesgrantmediakind/debug-agent)
 
+- [Overview](#overview)
+- [Quick Start](#quick-start)
+  - [Download the binary](#download-the-binary)
+  - [Usage instructions](#usage-instructions)
+  - [(Optional) Create a Secret for use with Private Docker Registries](#create-a-secret-for-use-with-private-docker-registries)
+- [Build from source](#build-from-source)
+- [Configuration options and over-rides](#configuration-options-and-over-rides)
+- [Authorization](#authorization)
+- [Roadmap](#roadmap)
+- [Contribute](#contribute)
+- [Acknowledgement](#acknowledgement)
 
 # Overview
 
@@ -23,20 +34,6 @@ How does it work?
 `kubectl-debug` is not related to `kubectl debug`
   
 `kubectl-debug` has been largely replaced by kubernetes [ephemeral containers](https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers). At the time of writing, ephemeral containers are still in alpha (Kubernetes current release is 1.22.4). You are required to explicitly enable alpha features (alpha features are not enabled by default). If you are using Azure AKS (and perhaps others) you are not able, nor permitted, to configure kubernetes feature flags and so you will need a solution like the one provided by this github project.
-
-
-- [Kubectl-debug](#kubectl-debug)
-- [Overview](#overview)
-- [Quick Start](#quick-start)
-  - [Download the binary](#download-the-binary)
-  - [Usage instructions](#usage-instructions)
-  - [(Optional) Create a Secret for use with Private Docker Registries](#create-a-secret-for-use-with-private-docker-registries)
-- [Build from source](#build-from-source)
-- [Configuration options and over-rides](#configuration-options-and-over-rides)
-- [Authorization](#authorization)
-- [Roadmap](#roadmap)
-- [Contribute](#contribute)
-- [Acknowledgement](#acknowledgement)
 
 
 # Quick Start
