@@ -1,4 +1,4 @@
-module github.com/aylei/kubectl-debug
+module github.com/jamestgrant/kubectl-debug
 
 go 1.12
 
