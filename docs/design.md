@@ -9,7 +9,7 @@
 
 When user runs `kubectl-debug --namespace <namespace> <target-pod> -c <container-name>`
 
-1. 'kubectl-debug' gets the target pod info from kube-api-server and extracts the `host` information
+1. 'kubectl-debug' gets the target-pod info from kube-api-server and extracts the `host` information (the target-pod within the namespace <namespace>)
 2. 'kubectl-debug' sends a 'debug-agent' pod specification to kube-api-server with a node-selector matching the `host`
 3. kube-api-server requests the creation of 'debug-agent' pod. 'debug-agent' pod is created in the default namespace (doesn't have to be the same namespace as the target pod)
 4. 'kubectl-debug' sends an HTTP request to the 'debug-agent' pod running on the `host` which includes a protocol upgrade from HTTP to SPDY
