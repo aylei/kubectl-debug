@@ -19,10 +19,10 @@
 
 # Overview
 
-`kubectl-debug` is an 'out-of-tree' solution for connecting to, and troubleshooting, an existing, running, 'target' container in an existing pod in a Kubernetes cluster.
-The target container may have a shell and busybox utils and hence provide some debug capability. or it may be very minimal and not even provide a shell - which makes real-time troubleshooting very difficult. kubectl-debug is designed to overcome that difficulty.
+`kubectl-debug` is an 'out-of-tree' solution for connecting to and troubleshooting an existing, running, 'target' container in an existing pod in a Kubernetes cluster.
+The target container may have a shell and busybox utils and hence provide some debug capability or it may be very minimal and not even provide a shell - which makes any real-time troubleshooting/debugging very difficult. kubectl-debug is designed to overcome that difficulty.
 
-This project is a fork of this fine [project](https://github.com/aylei/kubectl-debug). I have made several changes to this project which I suspect will never be accepted as a PR on that [project](https://github.com/aylei/kubectl-debug) as it seems to be no longer maintained (hence this fork).
+This project is a fork of this fine [project](https://github.com/aylei/kubectl-debug). I have made several changes which I suspect will never be accepted as a PR on that [project](https://github.com/aylei/kubectl-debug) as it seems to be no longer maintained (hence this fork).
 
   
 How does it work?  
@@ -119,8 +119,8 @@ Refer to [the official Kubernetes documentation on Secrets](https://kubernetes.i
 
 Clone this repo and:
 ```bash
-# make will build kubectl-debug binary, debug-agent binary and a docker image which includes the debug-agent binary
-# to use this kubectl-debug utility you only need to take the resultant kubectl-debug binary file. (The docker image used by the kubectl-debug is pre-built (from a release of this project) and is (by default) pulled from dockerhub.)
+# make will output a binary called 'kubectl-debug', a binary called 'debug-agent', and a docker image which includes the debug-agent binary
+# to use this kubectl-debug utility you only need to take the resultant kubectl-debug binary file. (The docker image used by kubectl-debug is pre-built (from a release of this project) and is (by default) pulled from dockerhub.)
 make
 
 # 'install' binary
