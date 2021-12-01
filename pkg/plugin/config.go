@@ -2,7 +2,6 @@ package plugin
 
 import (
 	"io/ioutil"
-
 	"gopkg.in/yaml.v2"
 )
 
@@ -30,7 +29,7 @@ type Config struct {
 	IsLxcfsEnabled           bool     `yaml:"isLxcfsEnabled,omitempty"`
 	Verbosity                int      `yaml:"verbosity,omitempty"`
 	// deprecated
-	AgentPortOld int `yaml:"agent_port,omitempty"`
+	AgentPortOld 			 int `yaml:"agent_port,omitempty"`
 }
 
 func Load(s string) (*Config, error) {

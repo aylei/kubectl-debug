@@ -67,7 +67,7 @@ func maxInt(lhs, rhs int) int {
 // if any error occurs above, an error status were written to the user's stderr.
 func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 
-	log.Println("receive debug request")
+	log.Println("received debug request")
 	containerUri := req.FormValue("container")
 
 	sverbosity := req.FormValue("verbosity")
@@ -162,5 +162,5 @@ func (s *Server) ServeDebug(w http.ResponseWriter, req *http.Request) {
 }
 
 func (s *Server) Healthz(w http.ResponseWriter, req *http.Request) {
-	w.Write([]byte("I'm OK!"))
+	w.Write([]byte("I am OK"))
 }

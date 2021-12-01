@@ -86,6 +86,7 @@ const (
 	// TO DO Remove Daemonset functionality
 	defaultDaemonSetName  				= "debug-agent"
 	defaultDaemonSetNs    				= "default"
+	
 
 	defaultDebugAgentImage               = "jamestgrant/debug-agent:latest"
 	defaultDebugAgentImagePullPolicy     = string(corev1.PullIfNotPresent)
@@ -223,66 +224,67 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	    fmt.Sprintf("if true, the registry's certificate will not be checked for validity. This will make your HTTPS connections insecure, default: %s", defaultRegistrySkipTLSVerify))
 
 	cmd.Flags().StringSliceVar(&opts.ForkPodRetainLabels, "fork-pod-retain-labels", []string{},
-		"in fork mode the pod labels retain labels name list, default is not set")
+		"list of pod labels to retain when in fork mode, default: not set")
 
 	cmd.Flags().StringVarP(&opts.ContainerName, "container", "c", "",
-		"Target container to debug, default to the first container in pod")
+		"Target container to debug, defaults to the first container in target pod spec")
 
 	cmd.Flags().IntVarP(&opts.AgentPort, "port", "p", 0,
-		fmt.Sprintf("Agent port for debug cli to connect, default to %d", Debug))
+		fmt.Sprintf("Debug agent port to which kubectl-debug will connect, default to %d", defaultDebugAgentPort))
 
-	cmd.Flags().StringVar(&opts.ConfigLocation, "debug-config", "",
-		fmt.Sprintf("Debug config file, default to ~%s", filepath.FromSlash(DebugAgent)))
+	cmd.Flags().StringVar(&opts.ConfigLocation, "configfile", "",
+		fmt.Sprintf("debug-agent config file (including path), default to %s", filepath.FromSlash(defaultDebugAgentConfigFileLocation)))
 
 	cmd.Flags().BoolVar(&opts.Fork, "fork", false,
 		"Fork a new pod for debugging (useful if the pod status is CrashLoopBackoff)")
 
 	cmd.Flags().BoolVar(&opts.PortForward, portForwardFlag, true,
-		fmt.Sprintf("Whether using port-forward to connect debug-agent, default to %t", defaultPortForward))
+		fmt.Sprintf("use port-forward to connect from kubectl-debug to debug-agent pod, default: %t", defaultPortForward))
 
+	// TO DO remove daemonset mode (aka agent mode)
 	cmd.Flags().StringVar(&opts.DebugAgentDaemonSet, "daemonset-name", opts.DebugAgentDaemonSet,
 		"Debug agent daemonset name when using port-forward")
 
-	cmd.Flags().StringVar(&opts.DebugAgentNamespace, "daemonset-ns", opts.DebugAgentNamespace,
-		"Debug agent namespace, default to 'default'")
+	cmd.Flags().StringVar(&opts.DebugAgentNamespace, "debug-agent-namespace", opts.DebugAgentNamespace,
+		fmt.Sprintf("namespace in which to create the debug-agent pod, default: %s", defaultDebugAgentNamespace))
 
-	// flags used for agentless mode.
+	// flags used for daemonsetless, aka agentless mode.
 	cmd.Flags().BoolVarP(&opts.AgentLess, agentlessFlag, "a", true,
-		fmt.Sprintf("Whether to turn on agentless mode. Agentless mode: debug target pod if there isn't an agent running on the target host, default to %t", defaultAgentless))
+		fmt.Sprintf("in this mode the debug-agent pod will be automatically created if there isn't an agent running on the target host, default: %t", defaultAgentless))
 
-	cmd.Flags().StringVar(&opts.AgentImage, "agent-image", "",
-		fmt.Sprintf("Agentless mode, the container Image to run the agent container , default to %s", Debug))
+	cmd.Flags().StringVar(&opts.AgentImage, "debug-agent-image", "",
+		fmt.Sprintf("the image of the debug-agent container, default: %s", defaultDebugAgentImage))
 
 	cmd.Flags().StringVar(&opts.AgentImagePullPolicy, "agent-pull-policy", "",
-		fmt.Sprintf("Agentless mode, the container Image pull policy , default to %s", Debug))
+		fmt.Sprintf("the debug-agent container image pull policy, default: %s", defaultDebugAgentImagePullPolicy))
 
 	cmd.Flags().StringVar(&opts.AgentImagePullSecretName, "agent-pull-secret-name", "",
-		fmt.Sprintf("Agentless mode, the container Image pull secret name , default to empty"))
+		fmt.Sprintf("the debug-agent container image pull secret name, default to empty"))
 
 	cmd.Flags().StringVar(&opts.AgentPodName, "agent-pod-name-prefix", "",
-		fmt.Sprintf("Agentless mode, pod name prefix , default to %s", Debug))
+		fmt.Sprintf("debug-agent pod name prefix , default to %s", defaultDebugAgentPodNamePrefix))
 
 	cmd.Flags().StringVar(&opts.AgentPodNamespace, "agent-pod-namespace", "",
-		fmt.Sprintf("Agentless mode, agent pod namespace, default to %s", Default))
+		fmt.Sprintf("agent pod namespace, default: %s", defaultDebugAgentPodNamespace))
 
 	cmd.Flags().StringVar(&opts.AgentPodResource.CpuRequests, "agent-pod-cpu-requests", "",
-		fmt.Sprintf("Agentless mode, agent pod cpu requests, default is not set"))
+		fmt.Sprintf("agent pod cpu requests, default is not set"))
 
 	cmd.Flags().StringVar(&opts.AgentPodResource.MemoryRequests, "agent-pod-memory-requests", "",
-		fmt.Sprintf("Agentless mode, agent pod memory requests, default is not set"))
+		fmt.Sprintf("agent pod memory requests, default is not set"))
 
 	cmd.Flags().StringVar(&opts.AgentPodResource.CpuLimits, "agent-pod-cpu-limits", "",
-		fmt.Sprintf("Agentless mode, agent pod cpu limits, default is not set"))
+		fmt.Sprintf("agent pod cpu limits, default is not set"))
 
 	cmd.Flags().StringVar(&opts.AgentPodResource.MemoryLimits, "agent-pod-memory-limits", "",
-		fmt.Sprintf("Agentless mode, agent pod memory limits, default is not set"))
+		fmt.Sprintf("agent pod memory limits, default is not set"))
 
 	cmd.Flags().BoolVarP(&opts.IsLxcfsEnabled, enableLxcsFlag, "", true,
-		fmt.Sprintf("Enable Lxcfs, the target container can use its proc files, default to %t", defaultLxcfsEnable))
+		fmt.Sprintf("Enable Lxcfs, the target container can use its proc files, default: %t", defaultLxcfsEnable))
 
 	cmd.Flags().IntVarP(&opts.Verbosity, "verbosity ", "v", 0,
-		fmt.Sprintf("Set logging verbosity, default to %d", defaultVerbosity))
-		
+		fmt.Sprintf("Set logging verbosity, default: %d", defaultVerbosity))
+
 	opts.Flags.AddFlags(cmd.Flags())
 
 	return cmd
@@ -316,9 +318,9 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 	if len(o.ConfigLocation) < 1 {
 		usr, err := user.Current()
 		if err == nil {
-			configFile = usr.HomeDir + filepath.FromSlash(DebugAgent)
+			configFile = filepath.FromSlash(defaultDebugAgentConfigFileLocation)
 		}
-File	}
+	}
 	config, err := LoadFile(configFile)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -337,11 +339,15 @@ File	}
 			o.Command = []string{"bash"}
 		}
 	}
+
 	if len(o.Image) < 1 {
 		if len(config.Image) > 0 {
 			o.Image = config.Image
 		} else {
-			o.Image = DebugContainerImage	}
+			o.Image = DebugContainerImage
+		}
+	}
+
 	if len(o.RegistrySecretName) < 1 {
 		if len(config.RegistrySecretName) > 0 {
 			o.RegistrySecretName = config.RegistrySecretName
@@ -349,6 +355,7 @@ File	}
 			o.RegistrySecretName = defaultRegistrySecretName
 		}
 	}
+
 	if len(o.RegistrySecretNamespace) < 1 {
 		if len(config.RegistrySecretNamespace) > 0 {
 			o.RegistrySecretNamespace = config.RegistrySecretNamespace
@@ -356,6 +363,7 @@ File	}
 			o.RegistrySecretNamespace = defaultRegistrySecretNamespace
 		}
 	}
+
 	if !o.RegistrySkipTLSVerify {
 		if config.RegistrySkipTLSVerify {
 			o.RegistrySkipTLSVerify = config.RegistrySkipTLSVerify
@@ -363,16 +371,18 @@ File	}
 			o.RegistrySkipTLSVerify = defaultRegistrySkipTLSVerify
 		}
 	}
+
 	if len(o.ForkPodRetainLabels) < 1 {
 		if len(config.ForkPodRetainLabels) > 0 {
 			o.ForkPodRetainLabels = config.ForkPodRetainLabels
 		}
 	}
+
 	if o.AgentPort < 1 {
 		if config.AgentPort > 0 {
 			o.AgentPort = config.AgentPort
 		} else {
-			o.AgentPort = Debug
+			o.AgentPort = defaultDebugAgentPort
 		}
 	}
 
@@ -388,9 +398,10 @@ File	}
 		if len(config.DebugAgentNamespace) > 0 {
 			o.DebugAgentNamespace = config.DebugAgentNamespace
 		} else {
-			o.DebugAgentNamespace = defaultDaemonSetNs
+			o.DebugAgentNamespace = defaultDebugAgentNamespace
 		}
 	}
+
 	if len(o.DebugAgentDaemonSet) < 1 {
 		if len(config.DebugAgentDaemonSet) > 0 {
 			o.DebugAgentDaemonSet = config.DebugAgentDaemonSet
@@ -403,7 +414,7 @@ File	}
 		if len(config.AgentPodNamePrefix) > 0 {
 			o.AgentPodName = config.AgentPodNamePrefix
 		} else {
-			o.AgentPodName = Debug
+			o.AgentPodName = defaultDebugAgentPodNamePrefix
 		}
 	}
 
@@ -411,7 +422,7 @@ File	}
 		if len(config.AgentImage) > 0 {
 			o.AgentImage = config.AgentImage
 		} else {
-			o.AgentImage = Debug
+			o.AgentImage = defaultDebugAgentImage
 		}
 	}
 
@@ -419,7 +430,7 @@ File	}
 		if len(config.AgentImagePullPolicy) > 0 {
 			o.AgentImagePullPolicy = config.AgentImagePullPolicy
 		} else {
-			o.AgentImagePullPolicy = Debug
+			o.AgentImagePullPolicy = defaultDebugAgentImagePullPolicy
 		}
 	}
 
@@ -427,7 +438,7 @@ File	}
 		if len(config.AgentImagePullSecretName) > 0 {
 			o.AgentImagePullSecretName = config.AgentImagePullSecretName
 		} else {
-			o.AgentImagePullSecretName = Debug
+			o.AgentImagePullSecretName = defaultDebugAgentImagePullSecretName
 		}
 	}
 
@@ -435,7 +446,7 @@ File	}
 		if len(config.AgentPodNamespace) > 0 {
 			o.AgentPodNamespace = config.AgentPodNamespace
 		} else {
-			o.AgentPodNamespace = Default
+			o.AgentPodNamespace = defaultDebugAgentPodNamespace
 		}
 	}
 
@@ -443,7 +454,7 @@ File	}
 		if len(config.AgentPodCpuRequests) > 0 {
 			o.AgentPodResource.CpuRequests = config.AgentPodCpuRequests
 		} else {
-			o.AgentPodResource.CpuRequests = Debug
+			o.AgentPodResource.CpuRequests = defaultDebugAgentPodCpuRequests
 		}
 	}
 
@@ -451,7 +462,7 @@ File	}
 		if len(config.AgentPodMemoryRequests) > 0 {
 			o.AgentPodResource.MemoryRequests = config.AgentPodMemoryRequests
 		} else {
-			o.AgentPodResource.MemoryRequests = Debug
+			o.AgentPodResource.MemoryRequests = defaultDebugAgentPodMemoryRequests
 		}
 	}
 
@@ -459,7 +470,7 @@ File	}
 		if len(config.AgentPodCpuLimits) > 0 {
 			o.AgentPodResource.CpuLimits = config.AgentPodCpuLimits
 		} else {
-			o.AgentPodResource.CpuLimits = Debug
+			o.AgentPodResource.CpuLimits = defaultDebugAgentPodCpuLimits
 		}
 	}
 
@@ -467,7 +478,7 @@ File	}
 		if len(config.AgentPodMemoryLimits) > 0 {
 			o.AgentPodResource.MemoryLimits = config.AgentPodMemoryLimits
 		} else {
-			o.AgentPodResource.MemoryLimits = Debug
+			o.AgentPodResource.MemoryLimits = defaultDebugAgentPodMemoryLimits
 		}
 	}
 
@@ -552,7 +563,7 @@ func (o *DebugOptions) Run() error {
 	containerName := o.ContainerName
 	if len(containerName) == 0 {
 		if len(pod.Spec.Containers) > 1 {
-			usageString := fmt.Sprintf("Defaulting container name to %s.", pod.Spec.Containers[0].Name)
+			usageString := fmt.Sprintf("No container name specified, choosing container: %s.", pod.Spec.Containers[0].Name)
 			fmt.Fprintf(o.ErrOut, "%s\n\r", usageString)
 		}
 		containerName = pod.Spec.Containers[0].Name
@@ -569,7 +580,7 @@ func (o *DebugOptions) Run() error {
 		agentPod = o.getAgentPod()
 		agentPod, err = o.launchPod(agentPod)
 		if err != nil {
-			fmt.Fprintf(o.Out, "the agentPod is not running, you should check the reason and delete the failed agentPod and retry.\n")
+			fmt.Fprintf(o.Out, "the agentPod is not running, you should check the reason, delete any failed debug-agent Pod(s) and retry.\n")
 			return err
 		}
 	}
