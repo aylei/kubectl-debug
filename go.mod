@@ -15,6 +15,7 @@ require (
 	github.com/elazarl/goproxy v0.0.0-20211114080932-d06c3be7c11b // indirect
 	github.com/exponent-io/jsonpath v0.0.0-20151013193312-d6023ce2651d // indirect
 	github.com/google/uuid v1.2.0
+	github.com/googleapis/gnostic v0.4.0
 	github.com/mitchellh/go-wordwrap v1.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.0.1
