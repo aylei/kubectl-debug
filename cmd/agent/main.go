@@ -3,8 +3,7 @@ package main
 import (
 	"flag"
 	"log"
-
-	"github.com/aylei/kubectl-debug/pkg/agent"
+	"github.com/jamestgrant/kubectl-debug/pkg/agent"
 )
 
 func main() {
@@ -27,5 +26,5 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Println("sever stopped, see you next time!")
+	log.Println("server stopped, see you next time!")
 }
