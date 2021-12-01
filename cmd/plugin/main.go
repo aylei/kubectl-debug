@@ -1,10 +1,9 @@
 package main
 
 import (
-	"github.com/aylei/kubectl-debug/pkg/plugin"
+	"github.com/jamestgrant/kubectl-debug/pkg/plugin"
 	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"os"
 )
 
