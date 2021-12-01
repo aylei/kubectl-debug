@@ -316,7 +316,6 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 	// read defaults from config file
 	configFile := o.ConfigLocation
 	if len(o.ConfigLocation) < 1 {
-		usr, err := user.Current()
 		if err == nil {
 			configFile = filepath.FromSlash(defaultDebugAgentConfigFileLocation)
 		}
