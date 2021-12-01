@@ -191,7 +191,7 @@ audit: false
 # default: true
 portForward: true
 
-# image of the debug container
+# the 'debug container' image
 # default: nicolaka/netshoot:latest
 image: nicolaka/netshoot:latest
 

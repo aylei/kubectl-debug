@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aylei/kubectl-debug/version"
+	"github.com/jamestgrant/kubectl-debug/version"
 
-	term "github.com/aylei/kubectl-debug/pkg/util"
+	term "github.com/jamestgrant/kubectl-debug/pkg/util"
 	dockerterm "github.com/docker/docker/pkg/term"
 	"github.com/rs/xid"
 	"github.com/spf13/cobra"
@@ -46,46 +46,56 @@ import (
 
 const (
 	example = `
-	# debug a container in the running pod, the first container will be picked by default
-	kubectl debug POD_NAME
-
-	# specify namespace or container
-	kubectl debug --namespace foo POD_NAME -c CONTAINER_NAME
-
-	# override the default troubleshooting image
-	kubectl debug POD_NAME --image aylei/debug-jvm
-
-	# override entrypoint of debug container
-	kubectl debug POD_NAME --image aylei/debug-jvm /bin/bash
-
-	# override the debug config file
-	kubectl debug POD_NAME --debug-config ./debug-config.yml
-
-	# check version
-	kubectl --version
+	# print the help
+	kubectl-debug -h
+	
+	# start the debug container in the same namespace, and cgroup etc as container 'CONTAINER_NAME' in pod 'POD_NAME' in namespace 'NAMESPACE'
+	kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME
+	
+	# in case of your pod stuck in CrashLoopBackoff state and cannot be connected to,
+	# you can fork a new pod and diagnose the problem in the forked pod
+	kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --fork
+	
+	# In 'fork' mode, if you want the copied pod to retain the labels of the original pod, you can use the --fork-pod-retain-labels parameter (comma separated, no spaces). If not set (default), this parameter is empty and so any labels of the original pod are not retained, and the labels of the copied pods are empty.
+	# Example of fork mode:
+	kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --fork --fork-pod-retain-labels=<labelKeyA>,<labelKeyB>,<labelKeyC>
+	
+	# in order to interact with the debug-agent pod on a node which doesn't have a public IP or direct access (firewall and other reasons) to access, port-forward mode is enabled by default. if you don't want port-forward mode, you can use --port-forward false to turn off it. I don't know why you'd want to do this, but you can if you want.
+	kubectl-debug --port-forward=false --namespace NAMESPACE POD_NAME -c CONTAINER_NAME
+	
+	# you can choose a different debug container image. By default, nicolaka/netshoot:latest will be used but you can specify anything you like
+	kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --image nicolaka/netshoot:latest 
+	
+	# you can set the debug-agent pod's resource limits/requests, for example:
+	# default is not set
+	kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --agent-pod-cpu-requests=250m --agent-pod-cpu-limits=500m --agent-pod-memory-requests=200Mi --agent-pod-memory-limits=500Mi
+	
+	# use primary docker registry, set registry kubernetes secret to pull image
+	# the default registry-secret-name is kubectl-debug-registry-secret, the default namespace is default
+	# please set the secret data source as {Username: <username>, Password: <password>}
+	kubectl-debug --namespace NAMESPACE POD_NAME --image nicolaka/netshoot:latest --registry-secret-name <k8s_secret_name> --registry-secret-namespace <namespace>
 `
 	longDesc = `
-Run a container in a running pod, this container will join the namespaces of an existing container of the pod.
-
-You may set default configuration such as image and command in the config file, which locates in "~/.kube/debug-config" by default.
+	kubectl-debug is an 'out-of-tree' solution for connecting to and troubleshooting an existing, running, 'target' container in an existing pod in a Kubernetes cluster.
+	The target container may have a shell and busybox utils and hence provide some debug capability or it may be very minimal and not even provide a shell - which makes any real-time troubleshooting/debugging very difficult. kubectl-debug is designed to overcome that difficulty.
 `
-	defaultImage          = "docker.io/nicolaka/netshoot:latest"
-	defaultAgentPort      = 10027
-	defaultConfigLocation = "/.kube/debug-config"
-	defaultDaemonSetName  = "debug-agent"
-	defaultDaemonSetNs    = "default"
+    usageError 							= "run like this: kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME"
+    defaultDebugContainerImage          = "docker.io/nicolaka/netshoot:latest"
+	defaultDebugAgentPort      			= 10027
+	defaultDebugAgentConfigFileLocation = "/tmp/debugAgentConfigFile"
+	// TO DO Remove Daemonset functionality
+	defaultDaemonSetName  				= "debug-agent"
+	defaultDaemonSetNs    				= "default"
 
-	usageError = "expects 'debug POD_NAME' for debug command"
-
-	defaultAgentImage               = "aylei/debug-agent:latest"
-	defaultAgentImagePullPolicy     = string(corev1.PullIfNotPresent)
-	defaultAgentImagePullSecretName = ""
-	defaultAgentPodNamePrefix       = "debug-agent-pod"
-	defaultAgentPodNamespace        = "default"
-	defaultAgentPodCpuRequests      = ""
-	defaultAgentPodCpuLimits        = ""
-	defaultAgentPodMemoryRequests   = ""
-	defaultAgentPodMemoryLimits     = ""
+	defaultDebugAgentImage               = "jamestgrant/debug-agent:latest"
+	defaultDebugAgentImagePullPolicy     = string(corev1.PullIfNotPresent)
+	defaultDebugAgentImagePullSecretName = ""
+	defaultDebugAgentPodNamePrefix       = "debug-agent-pod"
+	defaultDebugAgentPodNamespace        = "default"
+	defaultDebugAgentPodCpuRequests      = ""
+	defaultDebugAgentPodCpuLimits        = ""
+	defaultDebugAgentPodMemoryRequests   = ""
+	defaultDebugAgentPodMemoryLimits     = ""
 
 	defaultRegistrySecretName      = "kubectl-debug-registry-secret"
 	defaultRegistrySecretNamespace = "default"
@@ -99,6 +109,7 @@ You may set default configuration such as image and command in the config file, 
 	enableLxcsFlag  = "enable-lxcfs"
 	portForwardFlag = "port-forward"
 	agentlessFlag   = "agentless"
+	
 )
 
 // DebugOptions specify how to run debug container in a running pod
@@ -184,9 +195,9 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	opts := NewDebugOptions(streams)
 
 	cmd := &cobra.Command{
-		Use:                   "debug POD [-c CONTAINER] -- COMMAND [args...]",
+		Use:                   "kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME",
 		DisableFlagsInUseLine: true,
-		Short:                 "Run a container in a running pod",
+		Short:                 "Launch a debug container, attached to a target container in a running pod",
 		Long:                  longDesc,
 		Example:               example,
 		Version:               version.Version(),
@@ -200,54 +211,78 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	//cmd.Flags().BoolVarP(&opts.RetainContainer, "retain", "r", defaultRetain,
 	//	fmt.Sprintf("Retain container after debug session closed, default to %s", defaultRetain))
 	cmd.Flags().StringVar(&opts.Image, "image", "",
-		fmt.Sprintf("Container Image to run the debug container, default to %s", defaultImage))
+		fmt.Sprintf("the debug container image, default: %s", defaultDebugContainerImage))
+
 	cmd.Flags().StringVar(&opts.RegistrySecretName, "registry-secret-name", "",
-		"private registry secret name, default is kubectl-debug-registry-secret")
+	    fmt.Sprintf("private registry secret name, default:  %s", defaultRegistrySecretName))
+
 	cmd.Flags().StringVar(&opts.RegistrySecretNamespace, "registry-secret-namespace", "",
-		"private registry secret namespace, default is default")
+	    fmt.Sprintf("private registry secret namespace, default: %s", defaultRegistrySecretNamespace))
+
 	cmd.Flags().BoolVar(&opts.RegistrySkipTLSVerify, "registry-skip-tls-verify", false,
-		"If true, the registry's certificate will not be checked for validity. This will make your HTTPS connections insecure")
+	    fmt.Sprintf("if true, the registry's certificate will not be checked for validity. This will make your HTTPS connections insecure, default: %s", defaultRegistrySkipTLSVerify))
+
 	cmd.Flags().StringSliceVar(&opts.ForkPodRetainLabels, "fork-pod-retain-labels", []string{},
 		"in fork mode the pod labels retain labels name list, default is not set")
+
 	cmd.Flags().StringVarP(&opts.ContainerName, "container", "c", "",
 		"Target container to debug, default to the first container in pod")
+
 	cmd.Flags().IntVarP(&opts.AgentPort, "port", "p", 0,
-		fmt.Sprintf("Agent port for debug cli to connect, default to %d", defaultAgentPort))
+		fmt.Sprintf("Agent port for debug cli to connect, default to %d", Debug))
+
 	cmd.Flags().StringVar(&opts.ConfigLocation, "debug-config", "",
-		fmt.Sprintf("Debug config file, default to ~%s", filepath.FromSlash(defaultConfigLocation)))
+		fmt.Sprintf("Debug config file, default to ~%s", filepath.FromSlash(DebugAgent)))
+
 	cmd.Flags().BoolVar(&opts.Fork, "fork", false,
 		"Fork a new pod for debugging (useful if the pod status is CrashLoopBackoff)")
+
 	cmd.Flags().BoolVar(&opts.PortForward, portForwardFlag, true,
 		fmt.Sprintf("Whether using port-forward to connect debug-agent, default to %t", defaultPortForward))
+
 	cmd.Flags().StringVar(&opts.DebugAgentDaemonSet, "daemonset-name", opts.DebugAgentDaemonSet,
 		"Debug agent daemonset name when using port-forward")
+
 	cmd.Flags().StringVar(&opts.DebugAgentNamespace, "daemonset-ns", opts.DebugAgentNamespace,
 		"Debug agent namespace, default to 'default'")
+
 	// flags used for agentless mode.
 	cmd.Flags().BoolVarP(&opts.AgentLess, agentlessFlag, "a", true,
 		fmt.Sprintf("Whether to turn on agentless mode. Agentless mode: debug target pod if there isn't an agent running on the target host, default to %t", defaultAgentless))
+
 	cmd.Flags().StringVar(&opts.AgentImage, "agent-image", "",
-		fmt.Sprintf("Agentless mode, the container Image to run the agent container , default to %s", defaultAgentImage))
+		fmt.Sprintf("Agentless mode, the container Image to run the agent container , default to %s", Debug))
+
 	cmd.Flags().StringVar(&opts.AgentImagePullPolicy, "agent-pull-policy", "",
-		fmt.Sprintf("Agentless mode, the container Image pull policy , default to %s", defaultAgentImagePullPolicy))
+		fmt.Sprintf("Agentless mode, the container Image pull policy , default to %s", Debug))
+
 	cmd.Flags().StringVar(&opts.AgentImagePullSecretName, "agent-pull-secret-name", "",
 		fmt.Sprintf("Agentless mode, the container Image pull secret name , default to empty"))
+
 	cmd.Flags().StringVar(&opts.AgentPodName, "agent-pod-name-prefix", "",
-		fmt.Sprintf("Agentless mode, pod name prefix , default to %s", defaultAgentPodNamePrefix))
+		fmt.Sprintf("Agentless mode, pod name prefix , default to %s", Debug))
+
 	cmd.Flags().StringVar(&opts.AgentPodNamespace, "agent-pod-namespace", "",
-		fmt.Sprintf("Agentless mode, agent pod namespace, default to %s", defaultAgentPodNamespace))
+		fmt.Sprintf("Agentless mode, agent pod namespace, default to %s", Default))
+
 	cmd.Flags().StringVar(&opts.AgentPodResource.CpuRequests, "agent-pod-cpu-requests", "",
 		fmt.Sprintf("Agentless mode, agent pod cpu requests, default is not set"))
+
 	cmd.Flags().StringVar(&opts.AgentPodResource.MemoryRequests, "agent-pod-memory-requests", "",
 		fmt.Sprintf("Agentless mode, agent pod memory requests, default is not set"))
+
 	cmd.Flags().StringVar(&opts.AgentPodResource.CpuLimits, "agent-pod-cpu-limits", "",
 		fmt.Sprintf("Agentless mode, agent pod cpu limits, default is not set"))
+
 	cmd.Flags().StringVar(&opts.AgentPodResource.MemoryLimits, "agent-pod-memory-limits", "",
 		fmt.Sprintf("Agentless mode, agent pod memory limits, default is not set"))
+
 	cmd.Flags().BoolVarP(&opts.IsLxcfsEnabled, enableLxcsFlag, "", true,
 		fmt.Sprintf("Enable Lxcfs, the target container can use its proc files, default to %t", defaultLxcfsEnable))
+
 	cmd.Flags().IntVarP(&opts.Verbosity, "verbosity ", "v", 0,
 		fmt.Sprintf("Set logging verbosity, default to %d", defaultVerbosity))
+		
 	opts.Flags.AddFlags(cmd.Flags())
 
 	return cmd
@@ -281,9 +316,9 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 	if len(o.ConfigLocation) < 1 {
 		usr, err := user.Current()
 		if err == nil {
-			configFile = usr.HomeDir + filepath.FromSlash(defaultConfigLocation)
+			configFile = usr.HomeDir + filepath.FromSlash(DebugAgent)
 		}
-	}
+File	}
 	config, err := LoadFile(configFile)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -306,9 +341,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		if len(config.Image) > 0 {
 			o.Image = config.Image
 		} else {
-			o.Image = defaultImage
-		}
-	}
+			o.Image = DebugContainerImage	}
 	if len(o.RegistrySecretName) < 1 {
 		if len(config.RegistrySecretName) > 0 {
 			o.RegistrySecretName = config.RegistrySecretName
@@ -339,7 +372,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		if config.AgentPort > 0 {
 			o.AgentPort = config.AgentPort
 		} else {
-			o.AgentPort = defaultAgentPort
+			o.AgentPort = Debug
 		}
 	}
 
@@ -370,7 +403,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		if len(config.AgentPodNamePrefix) > 0 {
 			o.AgentPodName = config.AgentPodNamePrefix
 		} else {
-			o.AgentPodName = defaultAgentPodNamePrefix
+			o.AgentPodName = Debug
 		}
 	}
 
@@ -378,7 +411,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		if len(config.AgentImage) > 0 {
 			o.AgentImage = config.AgentImage
 		} else {
-			o.AgentImage = defaultAgentImage
+			o.AgentImage = Debug
 		}
 	}
 
@@ -386,7 +419,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		if len(config.AgentImagePullPolicy) > 0 {
 			o.AgentImagePullPolicy = config.AgentImagePullPolicy
 		} else {
-			o.AgentImagePullPolicy = defaultAgentImagePullPolicy
+			o.AgentImagePullPolicy = Debug
 		}
 	}
 
@@ -394,7 +427,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		if len(config.AgentImagePullSecretName) > 0 {
 			o.AgentImagePullSecretName = config.AgentImagePullSecretName
 		} else {
-			o.AgentImagePullSecretName = defaultAgentImagePullSecretName
+			o.AgentImagePullSecretName = Debug
 		}
 	}
 
@@ -402,7 +435,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		if len(config.AgentPodNamespace) > 0 {
 			o.AgentPodNamespace = config.AgentPodNamespace
 		} else {
-			o.AgentPodNamespace = defaultAgentPodNamespace
+			o.AgentPodNamespace = Default
 		}
 	}
 
@@ -410,7 +443,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		if len(config.AgentPodCpuRequests) > 0 {
 			o.AgentPodResource.CpuRequests = config.AgentPodCpuRequests
 		} else {
-			o.AgentPodResource.CpuRequests = defaultAgentPodCpuRequests
+			o.AgentPodResource.CpuRequests = Debug
 		}
 	}
 
@@ -418,7 +451,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		if len(config.AgentPodMemoryRequests) > 0 {
 			o.AgentPodResource.MemoryRequests = config.AgentPodMemoryRequests
 		} else {
-			o.AgentPodResource.MemoryRequests = defaultAgentPodMemoryRequests
+			o.AgentPodResource.MemoryRequests = Debug
 		}
 	}
 
@@ -426,7 +459,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		if len(config.AgentPodCpuLimits) > 0 {
 			o.AgentPodResource.CpuLimits = config.AgentPodCpuLimits
 		} else {
-			o.AgentPodResource.CpuLimits = defaultAgentPodCpuLimits
+			o.AgentPodResource.CpuLimits = Debug
 		}
 	}
 
@@ -434,7 +467,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		if len(config.AgentPodMemoryLimits) > 0 {
 			o.AgentPodResource.MemoryLimits = config.AgentPodMemoryLimits
 		} else {
-			o.AgentPodResource.MemoryLimits = defaultAgentPodMemoryLimits
+			o.AgentPodResource.MemoryLimits = Debug
 		}
 	}
 
@@ -961,10 +994,14 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 							Name:      "cgroup",
 							MountPath: "/sys/fs/cgroup",
 						},
-						// containerd client will need to access /var/data, /run/containerd and /run/runc
+						// containerd client needs to access /var/data, /run/containerd, /var/lib/containerd and /run/runc
 						{
 							Name:      "vardata",
 							MountPath: "/var/data",
+						},
+						{
+							Name:      "varlibcontainerd",
+							MountPath: "/var/lib/containerd",
 						},
 						{
 							Name:      "runcontainerd",
@@ -1031,6 +1068,14 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 						},
 					},
 				},
+				{
+					Name: "varlibcontainerd",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: "/var/lib/containerd",
+						},
+					},
+				},				
 				{
 					Name: "runrunc",
 					VolumeSource: corev1.VolumeSource{
