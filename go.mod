@@ -1,6 +1,6 @@
 module github.com/jamestgrant/kubectl-debug
 
-go 1.12
+go 1.17
 
 require (
 	github.com/MakeNowJust/heredoc v0.0.0-20171113091838-e9091a26100e // indirect
@@ -14,8 +14,9 @@ require (
 	github.com/docker/spdystream v0.0.0-20181023171402-6480d4af844c // indirect
 	github.com/elazarl/goproxy v0.0.0-20211114080932-d06c3be7c11b // indirect
 	github.com/exponent-io/jsonpath v0.0.0-20151013193312-d6023ce2651d // indirect
+	github.com/google/gnostic v0.2.0
 	github.com/google/uuid v1.2.0
-	github.com/googleapis/gnostic v0.2.0
+	github.com/googleapis/gnostic v0.4.1
 	github.com/mitchellh/go-wordwrap v1.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.0.1
