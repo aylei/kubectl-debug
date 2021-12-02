@@ -654,10 +654,11 @@ func (o *DebugOptions) Run() error {
 			return fmt.Errorf("there is no debug-agent pod running on the same node as your target pod %s\r\n", o.PodName)
 		}
 		if o.Verbosity > 0 {
-			fmt.Fprintf(o.Out, "pod %s PodIP %s, agentPodIP %s\n", o.PodName, pod.Status.PodIP, agent.Status.HostIP)
+			fmt.Fprintf(o.Out, "target pod: %s target pod IP: %s, debug-agent pod IP: %s\r\n", o.PodName, pod.Status.PodIP, agent.Status.HostIP)
 		}
 		err = o.runPortForward(agent)
 		if err != nil {
+			fmt.Fprintf(o.Out, "an error has occured, will delete debug-agent pod and exit\r\n")
 			o.deleteAgent(agentPod)
 			return err
 		}
