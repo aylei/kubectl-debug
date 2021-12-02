@@ -1,4 +1,4 @@
-package debug-agent
+package debugagent
 
 import (
 	"bufio"
