@@ -1,4 +1,4 @@
-package plugin
+package kubectl-debug
 
 import (
 	"io/ioutil"

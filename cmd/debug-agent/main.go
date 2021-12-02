@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"log"
-	"github.com/jamestgrant/kubectl-debug/pkg/agent"
+	"github.com/jamestgrant/kubectl-debug/pkg/debug-agent"
 )
 
 func main() {
