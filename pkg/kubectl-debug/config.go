@@ -16,7 +16,7 @@ type Config struct {
 	DebugAgentNamespace      string   `yaml:"debugAgentNamespace,omitempty"`
 	Command                  []string `yaml:"command,omitempty"`
 	PortForward              bool     `yaml:"portForward,omitempty"`
-	CreateDebugAgentPod                bool     `yaml:"createDebugAgentPod,omitempty"`
+	CreateDebugAgentPod      bool     `yaml:"createDebugAgentPod,omitempty"`
 	AgentPodNamePrefix       string   `yaml:"agentPodNamePrefix,omitempty"`
 	AgentPodNamespace        string   `yaml:"agentPodNamespace,omitempty"`
 	AgentImage               string   `yaml:"agentImage,omitempty"`
@@ -28,22 +28,13 @@ type Config struct {
 	AgentPodMemoryLimits     string   `yaml:"agentMemoryLimits,omitempty"`
 	IsLxcfsEnabled           bool     `yaml:"isLxcfsEnabled,omitempty"`
 	Verbosity                int      `yaml:"verbosity,omitempty"`
-	// deprecated
-	AgentPortOld 			 int `yaml:"agent_port,omitempty"`
 }
 
 func Load(s string) (*Config, error) {
 	cfg := &Config{}
-	cfg.CreateDebugAgentPod = true
-	cfg.PortForward = true
-	cfg.IsLxcfsEnabled = true
 	err := yaml.Unmarshal([]byte(s), cfg)
 	if err != nil {
 		return nil, err
-	}
-	// be compatible with old configuration key
-	if cfg.AgentPort == 0 {
-		cfg.AgentPort = cfg.AgentPortOld
 	}
 	return cfg, nil
 }
