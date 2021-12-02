@@ -1,4 +1,4 @@
-package kubectl-debug
+package kubectldebug
 
 import (
 	"context"
