@@ -590,6 +590,7 @@ func (o *DebugOptions) Run() error {
 	// which keeps the container running.
 	if o.Fork {
 		// build the fork pod labels
+		fmt.Fprintf(o.Out, "Forked mode selected\n")
 		podLabels := o.buildForkPodLabels(pod)
 		// copy pod and run
 		pod = copyAndStripPod(pod, containerName, podLabels)
@@ -603,7 +604,7 @@ func (o *DebugOptions) Run() error {
 
 	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
 		o.deleteAgent(agentPod)
-		return fmt.Errorf("cannot debug in a completed pod; current phase is %s", pod.Status.Phase)
+		return fmt.Errorf("cannot debug in a completed pod; current pod phase is %s", pod.Status.Phase)
 	}
 
 	containerID, err := o.getContainerIDByName(pod, containerName)
@@ -727,14 +728,14 @@ func (o *DebugOptions) Run() error {
 		return o.remoteExecute("POST", uri, o.Config, o.In, o.Out, o.ErrOut, t.Raw, sizeQueue)
 	}
 
-	// ensure forked pod is deleted on cancelation
+	// ensure debug pod is deleted
 	withCleanUp := func() error {
 		return interrupt.Chain(nil, func() {
 			if o.Fork {
 				fmt.Fprintf(o.Out, "deleting forked pod %s \n\r", pod.Name)
 				err := o.CoreClient.Pods(pod.Namespace).Delete(pod.Name, v1.NewDeleteOptions(0))
 				if err != nil {
-					// we may leak pod here, but we have nothing to do except noticing the user
+					// we may leak pod here, but we have nothing to do except notify the user
 					fmt.Fprintf(o.ErrOut, "failed to delete forked pod[Name:%s, Namespace:%s], consider manual deletion.\n\r", pod.Name, pod.Namespace)
 				}
 			}
@@ -747,14 +748,14 @@ func (o *DebugOptions) Run() error {
 			}
 			// delete agent pod
 			if o.CreateDebugAgentPod && agentPod != nil {
-				fmt.Fprintf(o.Out, "deleting debug-agent pod %s \n\r", pod.Name)
+				fmt.Fprintf(o.Out, "deleting debug-agent container from pod: %s \n\r", pod.Name)
 				o.deleteAgent(agentPod)
 			}
 		}).Run(fn)
 	}
 
 	if err := t.Safe(withCleanUp); err != nil {
-		fmt.Fprintf(o.Out, "error execute remote, %v\n", err)
+		fmt.Fprintf(o.Out, "an error occured executing remote command(s), %v\n", err)
 		return err
 	}
 	o.wait.Wait()
