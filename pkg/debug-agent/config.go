@@ -50,7 +50,7 @@ func Load(s string) (*Config, error) {
 
 func LoadFile(filename string) (*Config, error) {
 	if len(filename) < 1 {
-		fmt.Println("No config file provided. Using default values.")
+		fmt.Println("No config file provided. Using default values.\r\n")
 		return &DefaultConfig, nil
 	}
 	fmt.Printf("Reading config file %v.\r\n", filename)
