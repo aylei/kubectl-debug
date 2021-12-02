@@ -609,6 +609,7 @@ func (o *DebugOptions) Run() error {
 
 	containerID, err := o.getContainerIDByName(pod, containerName)
 	if err != nil {
+		fmt.Fprintf(o.Out, "an error occured, pod is %s, container name is: %s . Will clean up and exit.\r\n", pod, containerName)
 		o.deleteAgent(agentPod)
 		return err
 	}
