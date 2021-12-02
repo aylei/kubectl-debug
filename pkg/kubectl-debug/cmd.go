@@ -91,6 +91,7 @@ const (
 	defaultDebugAgentPodCpuLimits        	= ""
 	defaultDebugAgentPodMemoryRequests   	= ""
 	defaultDebugAgentPodMemoryLimits     	= ""
+	defaultDebugAgentDaemonSetName  		= "debug-agent"
 
 	defaultRegistrySecretName      			= "kubectl-debug-registry-secret"
 	defaultRegistrySecretNamespace 			= "default"
@@ -229,9 +230,9 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	cmd.Flags().BoolVar(&opts.PortForward, "port-forward", true,
 		fmt.Sprintf("use port-forward to connect from kubectl-debug to debug-agent pod, default: %t", defaultPortForward))
 
-	// TO DO remove daemonset mode (aka agent mode)
+	// it may be that someone has already deployed a daemonset containing with the debug-agent pod and so we can use that (create-debug-agent-pod must be 'false' for this param to be used)
 	cmd.Flags().StringVar(&opts.DebugAgentDaemonSet, "daemonset-name", opts.DebugAgentDaemonSet,
-		"Debug agent daemonset name when using port-forward")
+		fmt.Sprintf("debug agent daemonset name when using port-forward, default: %s",defaultDebugAgentDaemonSetName))
 
 	cmd.Flags().StringVar(&opts.DebugAgentNamespace, "debug-agent-namespace", opts.DebugAgentNamespace,
 		fmt.Sprintf("namespace in which to create the debug-agent pod, default: %s", defaultDebugAgentPodNamespace))
@@ -487,7 +488,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 
 	if !o.PortForward {
 		if config.PortForward {
-			o.PortForward = config.portForward
+			o.PortForward = config.PortForward
 		} else {
 			o.PortForward = defaultPortForward
 		}
