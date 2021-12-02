@@ -8,11 +8,11 @@ import (
 )
 
 func main() {
-	flags := pflag.NewFlagSet("kubectl-debug", pflag.ExitOnError)
+	flags := pflag.NewFlagSet("kubectldebug", pflag.ExitOnError)
 	pflag.CommandLine = flags
 
 	// bypass to DebugCmd
-	cmd := kubectl-debug.NewDebugCmd(genericclioptions.IOStreams{In: os.Stdin, Out: os.Stdout, ErrOut: os.Stderr})
+	cmd := kubectldebug.NewDebugCmd(genericclioptions.IOStreams{In: os.Stdin, Out: os.Stdout, ErrOut: os.Stderr})
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}
