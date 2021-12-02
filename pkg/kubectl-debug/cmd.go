@@ -47,21 +47,29 @@ const (
 	# print the help
 	kubectl-debug -h
 	
-	# start the debug container in the same namespace, and cgroup etc as container 'CONTAINER_NAME' in pod 'POD_NAME' in namespace 'NAMESPACE'
+	# start the debug container in the same namespace, and cgroup etc as container 'CONTAINER_NAME' 
+	# in pod 'POD_NAME' in namespace 'NAMESPACE'
 	kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME
 	
 	# in case of your pod stuck in CrashLoopBackoff state and cannot be connected to,
 	# you can fork a new pod and diagnose the problem in the forked pod
 	kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --fork
 	
-	# In 'fork' mode, if you want the copied pod to retain the labels of the original pod, you can use the --fork-pod-retain-labels parameter (comma separated, no spaces). If not set (default), this parameter is empty and so any labels of the original pod are not retained, and the labels of the copied pods are empty.
+	# In 'fork' mode, if you want the copied pod to retain the labels of the original pod, you can 
+	# use the --fork-pod-retain-labels parameter (comma separated, no spaces). If not set (default), 
+	# this parameter is empty and so any labels of the original pod are not retained, and the labels 
+	# of the copied pods are empty.
 	# Example of fork mode:
 	kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --fork --fork-pod-retain-labels=<labelKeyA>,<labelKeyB>,<labelKeyC>
 	
-	# in order to interact with the debug-agent pod on a node which doesn't have a public IP or direct access (firewall and other reasons) to access, port-forward mode is enabled by default. if you don't want port-forward mode, you can use --port-forward false to turn off it. I don't know why you'd want to do this, but you can if you want.
+	# in order to interact with the debug-agent pod on a node which doesn't have a public IP or direct 
+	# access (firewall and other reasons) to access, port-forward mode is enabled by default. if you don't 
+	# want port-forward mode, you can use --port-forward false to turn off it. I don't know why you'd want 
+	# to do this, but you can if you want.
 	kubectl-debug --port-forward=false --namespace NAMESPACE POD_NAME -c CONTAINER_NAME
 	
-	# you can choose a different debug container image. By default, nicolaka/netshoot:latest will be used but you can specify anything you like
+	# you can choose a different debug container image. By default, nicolaka/netshoot:latest will be used 
+	# but you can specify anything you like
 	kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --image nicolaka/netshoot:latest 
 	
 	# you can set the debug-agent pod's resource limits/requests, for example:
@@ -74,8 +82,11 @@ const (
 	kubectl-debug --namespace NAMESPACE POD_NAME --image nicolaka/netshoot:latest --registry-secret-name <k8s_secret_name> --registry-secret-namespace <namespace>
 `
 	longDesc = `
-	kubectl-debug is an 'out-of-tree' solution for connecting to and troubleshooting an existing, running, 'target' container in an existing pod in a Kubernetes cluster.
-	The target container may have a shell and busybox utils and hence provide some debug capability or it may be very minimal and not even provide a shell - which makes any real-time troubleshooting/debugging very difficult. kubectl-debug is designed to overcome that difficulty.
+	kubectl-debug is an 'out-of-tree' solution for connecting to and troubleshooting an existing, 
+	running, 'target' container in an existing pod in a Kubernetes cluster.
+	The target container may have a shell and busybox utils and hence provide some debug capability or it 
+	may be very minimal and not even provide a shell - which makes any real-time troubleshooting/debugging 
+	very difficult. kubectl-debug is designed to overcome that difficulty.
 `
     usageError 								= "run like this: kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME"
     defaultDebugContainerImage          	= "docker.io/nicolaka/netshoot:latest"
@@ -125,7 +136,7 @@ type DebugOptions struct {
 	// Debug-agent options
 	CreateDebugAgentPod      bool
 	AgentImage               string
-	AgentPort           	int
+	AgentPort           	 int
 	AgentImagePullPolicy     string
 	AgentImagePullSecretName string
 	
@@ -216,7 +227,7 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		"list of pod labels to retain when in fork mode, default: not set")
 
 	cmd.Flags().StringVarP(&opts.ContainerName, "container", "c", "",
-		"Target container to debug, defaults to the first container in target pod spec")
+		"target container to debug, defaults to the first container in target pod spec")
 
 	cmd.Flags().IntVarP(&opts.AgentPort, "port", "p", 0,
 		fmt.Sprintf("debug-agent port to which kubectl-debug will connect, default: %d", defaultDebugAgentPort))
@@ -225,7 +236,7 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		fmt.Sprintf("debug-agent config file (including path), if no config file is present at the specified location then default values are used. Default: %s", filepath.FromSlash(defaultDebugAgentConfigFileLocation)))
 
 	cmd.Flags().BoolVar(&opts.Fork, "fork", false,
-		"Fork a new pod for debugging (useful if the pod status is CrashLoopBackoff)")
+		"fork a new pod for debugging (useful if the pod status is CrashLoopBackoff)")
 
 	cmd.Flags().BoolVar(&opts.PortForward, "port-forward", true,
 		fmt.Sprintf("use port-forward to connect from kubectl-debug to debug-agent pod, default: %t", defaultPortForward))
@@ -239,7 +250,7 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 
 	// flags used for daemonsetless, aka createDebugAgentPod mode.
 	cmd.Flags().BoolVarP(&opts.CreateDebugAgentPod, "create-debug-agent-pod", "a", true,
-		fmt.Sprintf("debug-agent pod will be automatically created if there isn't an agent running on the target host, default: %t", defaultCreateDebugAgentPod))
+		fmt.Sprintf("debug-agent pod will be automatically created on the target host, default: %t", defaultCreateDebugAgentPod))
 
 	cmd.Flags().StringVar(&opts.AgentImage, "debug-agent-image", "",
 		fmt.Sprintf("the image of the debug-agent container, default: %s", defaultDebugAgentImage))
