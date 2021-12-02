@@ -12,12 +12,12 @@ func main() {
 	flag.StringVar(&configFile, "config.file", "", "Config file location.")
 	flag.Parse()
 
-	config, err := debug-agent.LoadFile(configFile)
+	config, err := debugagent.LoadFile(configFile)
 	if err != nil {
 		log.Fatalf("error reading config %v", err)
 	}
 
-	server, err := debug-agent.NewServer(config)
+	server, err := debugagent.NewServer(config)
 	if err != nil {
 		log.Fatal(err)
 	}
