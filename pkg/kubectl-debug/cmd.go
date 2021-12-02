@@ -105,35 +105,36 @@ const (
 // DebugOptions specify how to run debug container in a running pod
 type DebugOptions struct {
 
-	// Pod select options
-	Namespace string
-	PodName   string
+	// target pod select options
+	Namespace 				string
+	PodName   				string
+	Fork                	bool
+	ForkPodRetainLabels 	[]string
 
-	// Debug options
+	// Debug-container options
 	Image                   string
 	RegistrySecretName      string
 	RegistrySecretNamespace string
 	RegistrySkipTLSVerify   bool
-
-	ContainerName       string
-	Command             []string
-	AgentPort           int
-	AppName             string
-	ConfigLocation      string
-	Fork                bool
-	ForkPodRetainLabels []string
-	//used for createDebugAgentPod mode
-	CreateDebugAgentPod                bool
+	IsLxcfsEnabled 			 bool
+	ContainerName       	string
+	Command             	[]string
+	AppName             	string
+	ConfigLocation      	string
+	
+	// Debug-agent options
+	CreateDebugAgentPod      bool
 	AgentImage               string
+	AgentPort           	int
 	AgentImagePullPolicy     string
 	AgentImagePullSecretName string
+	
 	// agentPodName = agentPodNamePrefix + nodeName
-	AgentPodName      string
-	AgentPodNamespace string
-	AgentPodNode      string
+	AgentPodName      		 string
+	AgentPodNamespace 		 string
+	AgentPodNode      		 string
 	AgentPodResource  agentPodResources
-	// enable lxcfs
-	IsLxcfsEnabled bool
+
 
 	Flags      *genericclioptions.ConfigFlags
 	CoreClient coreclient.CoreV1Interface
@@ -198,8 +199,7 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 			cmdutil.CheckErr(opts.Run())
 		},
 	}
-	//cmd.Flags().BoolVarP(&opts.RetainContainer, "retain", "r", defaultRetain,
-	//	fmt.Sprintf("Retain container after debug session closed, default to %s", defaultRetain))
+
 	cmd.Flags().StringVar(&opts.Image, "image", "",
 		fmt.Sprintf("the debug container image, default: %s", defaultDebugContainerImage))
 
@@ -580,7 +580,7 @@ func (o *DebugOptions) Run() error {
 		agentPod = o.getAgentPod()
 		agentPod, err = o.launchPod(agentPod)
 		if err != nil {
-			fmt.Fprintf(o.Out, "the agentPod is not running, you should check the reason, delete any failed debug-agent Pod(s) and retry.\r\n")
+			fmt.Fprintf(o.Out, "the debug-agent pod is not running, you should check the reason, delete any failed debug-agent pod(s) and retry.\r\n")
 			return err
 		}
 	}
@@ -708,7 +708,7 @@ func (o *DebugOptions) Run() error {
 		if err != nil {
 			if errors.IsNotFound(err) {
 				if o.Verbosity > 0 {
-					o.Logger.Printf("Secret %v not found in namespace %v\r\n", o.RegistrySecretName, o.RegistrySecretNamespace)
+					o.Logger.Printf("Secret: %v not found in namespace: %v\r\n", o.RegistrySecretName, o.RegistrySecretNamespace)
 				}
 				authStr = ""
 			} else {
@@ -716,7 +716,7 @@ func (o *DebugOptions) Run() error {
 			}
 		} else {
 			if o.Verbosity > 1 {
-				o.Logger.Printf("Found secret %v:%v\r\n", o.RegistrySecretNamespace, o.RegistrySecretName)
+				o.Logger.Printf("Found secret: %v:%v\r\n", o.RegistrySecretNamespace, o.RegistrySecretName)
 			}
 			authStr, _ = o.extractSecret(registrySecret.Data)
 		}
@@ -734,11 +734,11 @@ func (o *DebugOptions) Run() error {
 	withCleanUp := func() error {
 		return interrupt.Chain(nil, func() {
 			if o.Fork {
-				fmt.Fprintf(o.Out, "deleting forked pod %s \n\r", pod.Name)
+				fmt.Fprintf(o.Out, "deleting forked pod: %s \n\r", pod.Name)
 				err := o.CoreClient.Pods(pod.Namespace).Delete(pod.Name, v1.NewDeleteOptions(0))
 				if err != nil {
 					// we may leak pod here, but we have nothing to do except notify the user
-					fmt.Fprintf(o.ErrOut, "failed to delete forked pod[Name:%s, Namespace:%s], consider manual deletion.\n\r", pod.Name, pod.Namespace)
+					fmt.Fprintf(o.ErrOut, "failed to delete forked pod: %s Namespace: %s, you may have to manually delete the pod.\n\r", pod.Name, pod.Namespace)
 				}
 			}
 
@@ -750,7 +750,7 @@ func (o *DebugOptions) Run() error {
 			}
 			// delete agent pod
 			if o.CreateDebugAgentPod && agentPod != nil {
-				fmt.Fprintf(o.Out, "deleting debug-agent container from pod: %s \n\r", pod.Name)
+				fmt.Fprintf(o.Out, "\n\rdeleting debug-agent container from pod: %s \n\r", pod.Name)
 				o.deleteAgent(agentPod)
 			}
 		}).Run(fn)
