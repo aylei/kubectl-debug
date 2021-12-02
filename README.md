@@ -78,7 +78,7 @@ kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --fork
 # Example of fork mode:
 kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --fork --fork-pod-retain-labels=<labelKeyA>,<labelKeyB>,<labelKeyC>
 
-# in order to interact with the debug-agent pod on a node which doesn't have a public IP or direct access (firewall and other reasons) to access, port-forward mode is enabled by default. if you don't want port-forward mode, you can use --port-forward false to turn off it. I don't know why you'd want to do this, but you can if you want.
+# in order to interact with the debug-agent pod on a node which doesn't have a public IP or direct access (firewall and other reasons) to access, port-forward mode is enabled by default. If you don't want port-forward mode, you can use --port-forward false to turn off it. I don't know why you'd want to do this, but you can if you want.
 kubectl-debug --port-forward=false --namespace NAMESPACE POD_NAME -c CONTAINER_NAME
 
 # you can choose a different debug container image. By default, nicolaka/netshoot:latest will be used but you can specify anything you like
@@ -93,9 +93,10 @@ kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --agent-pod-cpu-r
 # please set the secret data source as {Username: <username>, Password: <password>}
 kubectl-debug --namespace NAMESPACE POD_NAME --image nicolaka/netshoot:latest --registry-secret-name <k8s_secret_name> --registry-secret-namespace <namespace>
 
+# in addition to passing cli arguments, you can use a config file if you would like to non-default values for various things.
+kubectl-debug --configfile /PATH/FILENAME --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME
 
 ```
-* You can pass a config file if you which to use non-default values for various things. Please refer to [Configuration](#configuration) for details.
 
 
 ## Under the hood

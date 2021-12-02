@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/jamestgrant/kubectl-debug/version"
-
 	term "github.com/jamestgrant/kubectl-debug/pkg/util"
 	dockerterm "github.com/docker/docker/pkg/term"
 	"github.com/rs/xid"
@@ -219,10 +218,10 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		"Target container to debug, defaults to the first container in target pod spec")
 
 	cmd.Flags().IntVarP(&opts.AgentPort, "port", "p", 0,
-		fmt.Sprintf("Debug agent port to which kubectl-debug will connect, default to %d", defaultDebugAgentPort))
+		fmt.Sprintf("debug-agent port to which kubectl-debug will connect, default: %d", defaultDebugAgentPort))
 
 	cmd.Flags().StringVar(&opts.ConfigLocation, "configfile", "",
-		fmt.Sprintf("debug-agent config file (including path), default to %s", filepath.FromSlash(defaultDebugAgentConfigFileLocation)))
+		fmt.Sprintf("debug-agent config file (including path), if no config file is present at the specified location then default values are used. Default: %s", filepath.FromSlash(defaultDebugAgentConfigFileLocation)))
 
 	cmd.Flags().BoolVar(&opts.Fork, "fork", false,
 		"Fork a new pod for debugging (useful if the pod status is CrashLoopBackoff)")
@@ -488,7 +487,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 
 	if !o.PortForward {
 		if config.PortForward {
-			o.PortForward = config.defaultPortForward
+			o.PortForward = config.portForward
 		} else {
 			o.PortForward = defaultPortForward
 		}
@@ -625,10 +624,9 @@ func (o *DebugOptions) Run() error {
 	if o.PortForward {
 		var agent *corev1.Pod
 		if !o.CreateDebugAgentPod {
-			// Agent is running
-			if o.Verbosity > 0 {
-				o.Logger.Printf("Fetching daemonset '%v' from namespace %v\r\n", o.DebugAgentDaemonSet, o.DebugAgentNamespace)
-			}
+			// See if there is a debug-agent pod running as a daemonset
+			o.Logger.Printf("See if there is a debug-agent pod running in a daemonset. daemonset '%v' from namespace %v\r\n", o.DebugAgentDaemonSet, o.DebugAgentNamespace)
+		
 			daemonSet, err := o.KubeCli.AppsV1().DaemonSets(o.DebugAgentNamespace).Get(o.DebugAgentDaemonSet, v1.GetOptions{})
 			if err != nil {
 				return err
@@ -651,7 +649,7 @@ func (o *DebugOptions) Run() error {
 		}
 
 		if agent == nil {
-			return fmt.Errorf("there is no agent pod in the same node with your specified pod %s", o.PodName)
+			return fmt.Errorf("there is no debug-agent pod running on the same node as your target pod %s", o.PodName)
 		}
 		if o.Verbosity > 0 {
 			fmt.Fprintf(o.Out, "pod %s PodIP %s, agentPodIP %s\n", o.PodName, pod.Status.PodIP, agent.Status.HostIP)
@@ -666,7 +664,7 @@ func (o *DebugOptions) Run() error {
 		// on specified ports in localhost, the ports can not access until receive the
 		// ready signal
 		if o.Verbosity > 0 {
-			fmt.Fprintln(o.Out, "wait for forward port to debug agent ready...")
+			fmt.Fprintln(o.Out, "using port-forwarding. Waiting for port-forward connection with debug-agent...")
 		}
 		<-o.ReadyChannel
 	}
@@ -952,7 +950,7 @@ func (o *DebugOptions) launchPod(pod *corev1.Pod) (*corev1.Pod, error) {
 	return pod, nil
 }
 
-// getAgentPod construnct agentPod from agent pod template
+// getAgentPod construct debug-agent pod template
 func (o *DebugOptions) getAgentPod() *corev1.Pod {
 	prop := corev1.MountPropagationBidirectional
 	directoryCreate := corev1.HostPathDirectoryOrCreate
@@ -1195,7 +1193,7 @@ func (o *DebugOptions) deleteAgent(agentPod *corev1.Pod) {
 	}
 }
 
-// build the agent pod Resource Requirements
+// build the debug-agent pod Resource Requirements
 func (o *DebugOptions) buildAgentResourceRequirements() corev1.ResourceRequirements {
 	return getResourceRequirements(getResourceList(o.AgentPodResource.CpuRequests, o.AgentPodResource.MemoryRequests), getResourceList(o.AgentPodResource.CpuLimits, o.AgentPodResource.MemoryLimits))
 }
