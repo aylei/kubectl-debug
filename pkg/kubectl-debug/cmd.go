@@ -82,7 +82,7 @@ const (
 
 	defaultDebugAgentPort      				= 10027
 	defaultDebugAgentConfigFileLocation 	= "/tmp/debugAgentConfigFile"
-	defaultDebugAgentImage               	= "jamestgrant/debug-agent:latest"
+	defaultDebugAgentImage               	= "jamesgrantmediakind/debug-agent:latest"
 	defaultDebugAgentImagePullPolicy     	= string(corev1.PullIfNotPresent)
 	defaultDebugAgentImagePullSecretName	= ""
 	defaultDebugAgentPodNamePrefix      	= "debug-agent-pod"
