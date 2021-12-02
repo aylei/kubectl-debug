@@ -386,7 +386,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		if len(config.DebugAgentDaemonSet) > 0 {
 			o.DebugAgentDaemonSet = config.DebugAgentDaemonSet
 		} else {
-			o.DebugAgentDaemonSet = defaultDaemonSetName
+			o.DebugAgentDaemonSet = defaultDebugAgentDaemonSetName
 		}
 	}
 
