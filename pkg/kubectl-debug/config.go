@@ -16,7 +16,7 @@ type Config struct {
 	DebugAgentNamespace      string   `yaml:"debugAgentNamespace,omitempty"`
 	Command                  []string `yaml:"command,omitempty"`
 	PortForward              bool     `yaml:"portForward,omitempty"`
-	Agentless                bool     `yaml:"agentless,omitempty"`
+	CreateDebugAgentPod                bool     `yaml:"createDebugAgentPod,omitempty"`
 	AgentPodNamePrefix       string   `yaml:"agentPodNamePrefix,omitempty"`
 	AgentPodNamespace        string   `yaml:"agentPodNamespace,omitempty"`
 	AgentImage               string   `yaml:"agentImage,omitempty"`
@@ -34,7 +34,7 @@ type Config struct {
 
 func Load(s string) (*Config, error) {
 	cfg := &Config{}
-	cfg.Agentless = true
+	cfg.CreateDebugAgentPod = true
 	cfg.PortForward = true
 	cfg.IsLxcfsEnabled = true
 	err := yaml.Unmarshal([]byte(s), cfg)

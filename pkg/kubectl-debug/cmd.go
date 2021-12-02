@@ -78,38 +78,28 @@ const (
 	kubectl-debug is an 'out-of-tree' solution for connecting to and troubleshooting an existing, running, 'target' container in an existing pod in a Kubernetes cluster.
 	The target container may have a shell and busybox utils and hence provide some debug capability or it may be very minimal and not even provide a shell - which makes any real-time troubleshooting/debugging very difficult. kubectl-debug is designed to overcome that difficulty.
 `
-    usageError 							= "run like this: kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME"
-    defaultDebugContainerImage          = "docker.io/nicolaka/netshoot:latest"
-	defaultDebugAgentPort      			= 10027
-	defaultDebugAgentConfigFileLocation = "/tmp/debugAgentConfigFile"
-	// TO DO Remove Daemonset functionality
-	defaultDaemonSetName  				= "debug-agent"
-	defaultDaemonSetNs    				= "default"
-	
+    usageError 								= "run like this: kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME"
+    defaultDebugContainerImage          	= "docker.io/nicolaka/netshoot:latest"
 
-	defaultDebugAgentImage               = "jamestgrant/debug-agent:latest"
-	defaultDebugAgentImagePullPolicy     = string(corev1.PullIfNotPresent)
-	defaultDebugAgentImagePullSecretName = ""
-	defaultDebugAgentPodNamePrefix       = "debug-agent-pod"
-	defaultDebugAgentPodNamespace        = "default"
-	defaultDebugAgentPodCpuRequests      = ""
-	defaultDebugAgentPodCpuLimits        = ""
-	defaultDebugAgentPodMemoryRequests   = ""
-	defaultDebugAgentPodMemoryLimits     = ""
+	defaultDebugAgentPort      				= 10027
+	defaultDebugAgentConfigFileLocation 	= "/tmp/debugAgentConfigFile"
+	defaultDebugAgentImage               	= "jamestgrant/debug-agent:latest"
+	defaultDebugAgentImagePullPolicy     	= string(corev1.PullIfNotPresent)
+	defaultDebugAgentImagePullSecretName	= ""
+	defaultDebugAgentPodNamePrefix      	= "debug-agent-pod"
+	defaultDebugAgentPodNamespace       	= "default"
+	defaultDebugAgentPodCpuRequests     	= ""
+	defaultDebugAgentPodCpuLimits        	= ""
+	defaultDebugAgentPodMemoryRequests   	= ""
+	defaultDebugAgentPodMemoryLimits     	= ""
 
-	defaultRegistrySecretName      = "kubectl-debug-registry-secret"
-	defaultRegistrySecretNamespace = "default"
-	defaultRegistrySkipTLSVerify   = false
-
-	defaultPortForward = true
-	defaultAgentless   = true
-	defaultLxcfsEnable = true
-	defaultVerbosity   = 0
-
-	enableLxcsFlag  = "enable-lxcfs"
-	portForwardFlag = "port-forward"
-	agentlessFlag   = "agentless"
-	
+	defaultRegistrySecretName      			= "kubectl-debug-registry-secret"
+	defaultRegistrySecretNamespace 			= "default"
+	defaultRegistrySkipTLSVerify   			= false
+	defaultPortForward 						= true
+	defaultCreateDebugAgentPod   			= true
+	defaultLxcfsEnable 						= true
+	defaultVerbosity   						= 0	
 )
 
 // DebugOptions specify how to run debug container in a running pod
@@ -132,8 +122,8 @@ type DebugOptions struct {
 	ConfigLocation      string
 	Fork                bool
 	ForkPodRetainLabels []string
-	//used for agentless mode
-	AgentLess                bool
+	//used for createDebugAgentPod mode
+	CreateDebugAgentPod                bool
 	AgentImage               string
 	AgentImagePullPolicy     string
 	AgentImagePullSecretName string
@@ -237,7 +227,7 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	cmd.Flags().BoolVar(&opts.Fork, "fork", false,
 		"Fork a new pod for debugging (useful if the pod status is CrashLoopBackoff)")
 
-	cmd.Flags().BoolVar(&opts.PortForward, portForwardFlag, true,
+	cmd.Flags().BoolVar(&opts.PortForward, "port-forward", true,
 		fmt.Sprintf("use port-forward to connect from kubectl-debug to debug-agent pod, default: %t", defaultPortForward))
 
 	// TO DO remove daemonset mode (aka agent mode)
@@ -247,9 +237,9 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	cmd.Flags().StringVar(&opts.DebugAgentNamespace, "debug-agent-namespace", opts.DebugAgentNamespace,
 		fmt.Sprintf("namespace in which to create the debug-agent pod, default: %s", defaultDebugAgentPodNamespace))
 
-	// flags used for daemonsetless, aka agentless mode.
-	cmd.Flags().BoolVarP(&opts.AgentLess, agentlessFlag, "a", true,
-		fmt.Sprintf("in this mode the debug-agent pod will be automatically created if there isn't an agent running on the target host, default: %t", defaultAgentless))
+	// flags used for daemonsetless, aka createDebugAgentPod mode.
+	cmd.Flags().BoolVarP(&opts.CreateDebugAgentPod, "create-debug-agent-pod", "a", true,
+		fmt.Sprintf("debug-agent pod will be automatically created if there isn't an agent running on the target host, default: %t", defaultCreateDebugAgentPod))
 
 	cmd.Flags().StringVar(&opts.AgentImage, "debug-agent-image", "",
 		fmt.Sprintf("the image of the debug-agent container, default: %s", defaultDebugAgentImage))
@@ -278,10 +268,10 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	cmd.Flags().StringVar(&opts.AgentPodResource.MemoryLimits, "agent-pod-memory-limits", "",
 		fmt.Sprintf("agent pod memory limits, default is not set"))
 
-	cmd.Flags().BoolVarP(&opts.IsLxcfsEnabled, enableLxcsFlag, "", true,
+	cmd.Flags().BoolVarP(&opts.IsLxcfsEnabled, "enable-lxcfs", "", true,
 		fmt.Sprintf("Enable Lxcfs, the target container can use its proc files, default: %t", defaultLxcfsEnable))
 
-	cmd.Flags().IntVarP(&opts.Verbosity, "verbosity ", "v", 0,
+	cmd.Flags().IntVarP(&opts.Verbosity, "verbosity", "v", 0,
 		fmt.Sprintf("Set logging verbosity, default: %d", defaultVerbosity))
 
 	opts.Flags.AddFlags(cmd.Flags())
@@ -312,7 +302,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 
 	o.PodName = args[0]
 
-	// read defaults from config file
+	// read values from config file
 	configFile := o.ConfigLocation
 	if len(o.ConfigLocation) < 1 {
 		if err == nil {
@@ -328,7 +318,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		config = &Config{}
 	}
 
-	// combine defaults, config file and user parameters
+	// combine hardcoded default values, configfile specified values and user cli specified values
 	o.Command = args[1:]
 	if len(o.Command) < 1 {
 		if len(config.Command) > 0 {
@@ -381,14 +371,6 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 			o.AgentPort = config.AgentPort
 		} else {
 			o.AgentPort = defaultDebugAgentPort
-		}
-	}
-
-	if o.Verbosity < 1 {
-		if config.Verbosity > 0 {
-			o.Verbosity = config.Verbosity
-		} else {
-			o.Verbosity = defaultVerbosity
 		}
 	}
 
@@ -480,16 +462,36 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		}
 	}
 
-	if !cmd.Flag(enableLxcsFlag).Changed {
-		o.IsLxcfsEnabled = config.IsLxcfsEnabled
+	if o.Verbosity < 1 {
+		if config.Verbosity > 0 {
+			o.Verbosity = config.Verbosity
+		} else {
+			o.Verbosity = defaultVerbosity
+		}
 	}
 
-	if !cmd.Flag(portForwardFlag).Changed {
-		o.PortForward = config.PortForward
+	if !o.IsLxcfsEnabled {
+		if config.IsLxcfsEnabled {
+			o.IsLxcfsEnabled = config.IsLxcfsEnabled
+		} else {
+			o.IsLxcfsEnabled = defaultLxcfsEnable
+		}
+	}
+	
+	if !o.CreateDebugAgentPod {
+		if config.CreateDebugAgentPod {
+			o.CreateDebugAgentPod = config.CreateDebugAgentPod
+		} else {
+			o.CreateDebugAgentPod = defaultCreateDebugAgentPod
+		}
 	}
 
-	if !cmd.Flag(agentlessFlag).Changed {
-		o.AgentLess = config.Agentless
+	if !o.PortForward {
+		if config.PortForward {
+			o.PortForward = config.defaultPortForward
+		} else {
+			o.PortForward = defaultPortForward
+		}
 	}
 
 	o.Ports = []string{strconv.Itoa(o.AgentPort)}
@@ -519,13 +521,13 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		if o.Flags.Context != nil && len(*o.Flags.Context) > 0 {
 			// --context : "The name of the kubeconfig context to use"
 			cfgCtxt = rwCfg.Contexts[*o.Flags.Context]
-			log.Printf("Getting user name from context '%v' received from switch --context\r\n", *o.Flags.Context)
+			log.Printf("Getting user name from kubectl context '%v' received from switch --context\r\n", *o.Flags.Context)
 		} else {
 			cfgCtxt = rwCfg.Contexts[rwCfg.CurrentContext]
-			log.Printf("Getting user name from default context '%v'\r\n", rwCfg.CurrentContext)
+			log.Printf("Getting user name from default kubectl context '%v'\r\n", rwCfg.CurrentContext)
 		}
 		o.UserName = cfgCtxt.AuthInfo
-		log.Printf("User name '%v' received from context\r\n", o.UserName)
+		log.Printf("User name '%v' received from kubectl context\r\n", o.UserName)
 	}
 
 	clientset, err := kubernetes.NewForConfig(o.Config)
@@ -542,7 +544,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 // Validate validate
 func (o *DebugOptions) Validate() error {
 	if len(o.PodName) == 0 {
-		return fmt.Errorf("pod name must be specified")
+		return fmt.Errorf("target pod name must be specified")
 	}
 	if len(o.Command) == 0 {
 		return fmt.Errorf("you must specify at least one command for the container")
@@ -570,9 +572,9 @@ func (o *DebugOptions) Run() error {
 	if err != nil {
 		return err
 	}
-	// Launch debug launching pod in agentless mode.
+	// Launch debug launching pod in createDebugAgentPod mode.
 	var agentPod *corev1.Pod
-	if o.AgentLess {
+	if o.CreateDebugAgentPod {
 		o.AgentPodNode = pod.Spec.NodeName
 		o.AgentPodName = fmt.Sprintf("%s-%s", o.AgentPodName, uuid.NewUUID())
 		agentPod = o.getAgentPod()
@@ -622,7 +624,7 @@ func (o *DebugOptions) Run() error {
 
 	if o.PortForward {
 		var agent *corev1.Pod
-		if !o.AgentLess {
+		if !o.CreateDebugAgentPod {
 			// Agent is running
 			if o.Verbosity > 0 {
 				o.Logger.Printf("Fetching daemonset '%v' from namespace %v\r\n", o.DebugAgentDaemonSet, o.DebugAgentNamespace)
@@ -730,7 +732,7 @@ func (o *DebugOptions) Run() error {
 	withCleanUp := func() error {
 		return interrupt.Chain(nil, func() {
 			if o.Fork {
-				fmt.Fprintf(o.Out, "Start deleting forked pod %s \n\r", pod.Name)
+				fmt.Fprintf(o.Out, "deleting forked pod %s \n\r", pod.Name)
 				err := o.CoreClient.Pods(pod.Namespace).Delete(pod.Name, v1.NewDeleteOptions(0))
 				if err != nil {
 					// we may leak pod here, but we have nothing to do except noticing the user
@@ -745,8 +747,8 @@ func (o *DebugOptions) Run() error {
 				}
 			}
 			// delete agent pod
-			if o.AgentLess && agentPod != nil {
-				fmt.Fprintf(o.Out, "Start deleting agent pod %s \n\r", pod.Name)
+			if o.CreateDebugAgentPod && agentPod != nil {
+				fmt.Fprintf(o.Out, "deleting debug-agent pod %s \n\r", pod.Name)
 				o.deleteAgent(agentPod)
 			}
 		}).Run(fn)
@@ -1183,8 +1185,8 @@ func (o *DebugOptions) auth(pod *corev1.Pod) error {
 
 // delete the agent pod
 func (o *DebugOptions) deleteAgent(agentPod *corev1.Pod) {
-	// only with agentless flag we can delete the agent pod
-	if !o.AgentLess {
+	// only if createDebugAgentPod=true should we manage the debug-agent pod
+	if !o.CreateDebugAgentPod {
 		return
 	}
 	err := o.CoreClient.Pods(agentPod.Namespace).Delete(agentPod.Name, v1.NewDeleteOptions(0))
