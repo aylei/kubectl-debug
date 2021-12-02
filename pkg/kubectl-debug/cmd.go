@@ -332,7 +332,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		if len(config.Image) > 0 {
 			o.Image = config.Image
 		} else {
-			o.Image = defaultDebugAgentImage
+			o.Image = defaultDebugContainerImage
 		}
 	}
 
