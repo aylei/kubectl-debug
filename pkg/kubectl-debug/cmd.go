@@ -580,7 +580,7 @@ func (o *DebugOptions) Run() error {
 		agentPod = o.getAgentPod()
 		agentPod, err = o.launchPod(agentPod)
 		if err != nil {
-			fmt.Fprintf(o.Out, "the agentPod is not running, you should check the reason, delete any failed debug-agent Pod(s) and retry.\n")
+			fmt.Fprintf(o.Out, "the agentPod is not running, you should check the reason, delete any failed debug-agent Pod(s) and retry.\r\n")
 			return err
 		}
 	}
@@ -596,7 +596,7 @@ func (o *DebugOptions) Run() error {
 		pod = copyAndStripPod(pod, containerName, podLabels)
 		pod, err = o.launchPod(pod)
 		if err != nil {
-			fmt.Fprintf(o.Out, "the ForkedPod is not running, you should check the reason and delete the failed ForkedPod and retry\n")
+			fmt.Fprintf(o.Out, "the ForkedPod is not running, you should check the reason and delete the failed ForkedPod and retry\r\n")
 			o.deleteAgent(agentPod)
 			return err
 		}
@@ -651,7 +651,7 @@ func (o *DebugOptions) Run() error {
 		}
 
 		if agent == nil {
-			return fmt.Errorf("there is no debug-agent pod running on the same node as your target pod %s", o.PodName)
+			return fmt.Errorf("there is no debug-agent pod running on the same node as your target pod %s\r\n", o.PodName)
 		}
 		if o.Verbosity > 0 {
 			fmt.Fprintf(o.Out, "pod %s PodIP %s, agentPodIP %s\n", o.PodName, pod.Status.PodIP, agent.Status.HostIP)
@@ -666,7 +666,7 @@ func (o *DebugOptions) Run() error {
 		// on specified ports in localhost, the ports can not access until receive the
 		// ready signal
 		if o.Verbosity > 0 {
-			fmt.Fprintln(o.Out, "using port-forwarding. Waiting for port-forward connection with debug-agent...")
+			fmt.Fprintln(o.Out, "using port-forwarding. Waiting for port-forward connection with debug-agent...\r\n")
 		}
 		<-o.ReadyChannel
 	}
@@ -755,7 +755,7 @@ func (o *DebugOptions) Run() error {
 	}
 
 	if err := t.Safe(withCleanUp); err != nil {
-		fmt.Fprintf(o.Out, "an error occured executing remote command(s), %v\n", err)
+		fmt.Fprintf(o.Out, "an error occured executing remote command(s), %v\r\n", err)
 		return err
 	}
 	o.wait.Wait()
@@ -872,7 +872,7 @@ func (o *DebugOptions) setupTTY() term.TTY {
 	t.Raw = true
 	if !t.IsTerminalIn() {
 		if o.ErrOut != nil {
-			fmt.Fprintln(o.ErrOut, "Unable to use a TTY - input is not a terminal or the right kind of file")
+			fmt.Fprintln(o.ErrOut, "Unable to use a TTY - input is not a terminal or the right kind of file\r\n")
 		}
 		return t
 	}
@@ -945,7 +945,7 @@ func (o *DebugOptions) launchPod(pod *corev1.Pod) (*corev1.Pod, error) {
 	fmt.Fprintf(o.Out, "Waiting for pod %s to run...\n", pod.Name)
 	event, err := watch.UntilWithoutRetry(ctx, watcher, conditions.PodRunning)
 	if err != nil {
-		fmt.Fprintf(o.ErrOut, "Error occurred while waiting for pod to run:  %v\n", err)
+		fmt.Fprintf(o.ErrOut, "Error occurred while waiting for pod to run:  %v\r\n", err)
 		return nil, err
 	}
 	pod = event.Object.(*corev1.Pod)
@@ -1105,7 +1105,7 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 
 func (o *DebugOptions) runPortForward(pod *corev1.Pod) error {
 	if pod.Status.Phase != corev1.PodRunning {
-		return fmt.Errorf("unable to forward port because pod is not running. Current status=%v", pod.Status.Phase)
+		return fmt.Errorf("unable to forward port because pod is not running. Current status=%v\r\n", pod.Status.Phase)
 	}
 	o.wait.Add(1)
 	go func() {
@@ -1167,7 +1167,7 @@ func (o *DebugOptions) auth(pod *corev1.Pod) error {
 	}
 	response, err := sarClient.SelfSubjectAccessReviews().Create(sar)
 	if err != nil {
-		fmt.Fprintf(o.ErrOut, "Failed to create SelfSubjectAccessReview: %v \n", err)
+		fmt.Fprintf(o.ErrOut, "Failed to create SelfSubjectAccessReview: %v \r\n", err)
 		return err
 	}
 	if !response.Status.Allowed {
@@ -1191,7 +1191,7 @@ func (o *DebugOptions) deleteAgent(agentPod *corev1.Pod) {
 	}
 	err := o.CoreClient.Pods(agentPod.Namespace).Delete(agentPod.Name, v1.NewDeleteOptions(0))
 	if err != nil {
-		fmt.Fprintf(o.ErrOut, "failed to delete agent pod[Name:%s, Namespace: %s], consider manual deletion.\nerror msg: %v", agentPod.Name, agentPod.Namespace, err)
+		fmt.Fprintf(o.ErrOut, "failed to delete agent pod[Name:%s, Namespace: %s], consider manual deletion.\r\nerror msg: %v", agentPod.Name, agentPod.Namespace, err)
 	}
 }
 
