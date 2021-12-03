@@ -8,11 +8,11 @@
 - [Quick start](#quick-start)
   - [Download the binary](#download-the-binary)
   - [Usage instructions](#usage-instructions)
+  - [Build from source](#build-from-source)  
   - [Under the hood](#under-the-hood)
-  - [(Optional) Create a Secret for use with Private Docker Registries](#create-a-secret-for-use-with-private-docker-registries)
-- [Build from source](#build-from-source)
 - [Configuration options and overrides](#configuration-options-and-overrides)
 - [Authorization / required privileges](#authorization-required-privileges)
+- [(Optional) Create a Secret for use with Private Docker Registries](#create-a-secret-for-use-with-private-docker-registries)
 - [Roadmap](#roadmap)
 - [Contribute](#contribute)
 - [Acknowledgement](#acknowledgement)
@@ -32,7 +32,8 @@ How does it work?
 <ol>
 <li> User invokes kubectl-debug like this: <code>kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME</code></li>
 <li> kubectl-debug communicates with the cluster using the same interface as kubectl and instructs kubernetes to request the launch of a new 'debug-agent' container on the same node as the 'target' container </li>
-<li> debug-agent container connects directly to containerd (or dockerd if applicable) on the host which is running the 'target' container and launches a new 'debug' container in the same <code>pid</code>, <code>network</code>, <code>user</code> and <code>ipc</code> namespaces as the target container </li>
+<li> debug-agent process within the debug-agent pod connects directly to containerd (or dockerd if applicable) on the host which is running the 'target' container and requests the launch of a new 'debug' container in the same <code>pid</code>, <code>network</code>, <code>user</code> and <code>ipc</code> namespaces as the target container </li>
+<li>In summary: 'kubectl-debug' causes the launch of the 'debug-agent' container, 'debug-agent' the causes the launch of the 'debug' pod/container </li>
 <li> 'debug-agent' pod redirects the terminal output of the 'debug' container to the 'kubectl-debug' executable and so you can interact directly with the shell running in the 'debug' container. You can now use of the troubleshooting tools available in the debug container (BASH, cURL, tcpdump, etc) without the need to have these utilities in the target container image.</li>
 </ol>
 </dd>
@@ -280,7 +281,7 @@ Just like debugging the ordinary container, we can debug the init-container of a
 ```
 
 
-## Under the hood
+# Under the hood
 
 `kubectl-debug` consists of 3 components:
 
@@ -302,25 +303,6 @@ The following occurs when the user runs the command: `kubectl-debug --namespace 
 10. 'debug-agent' closes the SPDY connection, then waits for the `debug container` to exit and do the cleanup
 11. 'debug-agent' pod is deleted
 
-## (Optional) Create a Secret for Use with Private Docker Registries
-
-You can use a new or existing [Kubernetes `dockerconfigjson` secret](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/#registry-secret-existing-credentials). For example:
-
-```bash
-# Be sure to run "docker login" beforehand.
-kubectl create secret generic kubectl-debug-registry-secret \
-    --from-file=.dockerconfigjson=<path/to/.docker/config.json> \
-    --type=kubernetes.io/dockerconfigjson
-```
-
-Alternatively, you can create a secret with the key `authStr` and a JSON payload containing a `Username` and `Password`. For example:
-
-```bash
-echo -n '{"Username": "calmkart", "Password": "calmkart"}' > ./authStr
-kubectl create secret generic kubectl-debug-registry-secret --from-file=./authStr
-```
-
-Refer to [the official Kubernetes documentation on Secrets](https://kubernetes.io/docs/concepts/configuration/secret/) for more ways to create them.
 
 # Configuration options and overrides
 
@@ -428,6 +410,26 @@ Where USERNAME is the kubernetes user as determined by the client that launched 
 <dt><code>audit_shim</code>
 <dd>String array that will be placed before the command that will be run in the debug container.  The default value is <code>{"/usr/bin/strace", "-o", "KCTLDBG-FIFO", "-f", "-e", "trace=/exec"}</code>.  The agent will replace KCTLDBG-FIFO with the fifo path ( see above )  If auditing is enabled then agent will use the concatenation of the array specified by <code>audit_shim</code> and the original command array it was going to use.</dd>
 </dl>
+
+# (Optional) Create a Secret for Use with Private Docker Registries
+
+You can use a new or existing [Kubernetes `dockerconfigjson` secret](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/#registry-secret-existing-credentials). For example:
+
+```bash
+# Be sure to run "docker login" beforehand.
+kubectl create secret generic kubectl-debug-registry-secret \
+    --from-file=.dockerconfigjson=<path/to/.docker/config.json> \
+    --type=kubernetes.io/dockerconfigjson
+```
+
+Alternatively, you can create a secret with the key `authStr` and a JSON payload containing a `Username` and `Password`. For example:
+
+```bash
+echo -n '{"Username": "calmkart", "Password": "calmkart"}' > ./authStr
+kubectl create secret generic kubectl-debug-registry-secret --from-file=./authStr
+```
+
+Refer to [the official Kubernetes documentation on Secrets](https://kubernetes.io/docs/concepts/configuration/secret/) for more ways to create them.
 
 
 # Roadmap
