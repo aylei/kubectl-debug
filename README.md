@@ -60,11 +60,13 @@ sudo mv kubectl-debug /usr/local/bin/
 
 Clone this repo and:
 ```bash
-# to use this kubectl-debug utility, you only need to take the resultant kubectl-debug binary file which is created by:
+# to use this kubectl-debug utility, you only need to take the resultant kubectl-debug binary 
+# file which is created by:
 make kubectl-debug-binary
 
-# to 'install' the kubectl-debug binary, make it executable and either call it directy, put it in your PATH, or 
-# move it to a location which is already in your PATH:
+# to 'install' the kubectl-debug binary, make it executable and either call it directy, put 
+# it in your PATH, or move it to a location which is already in your PATH:
+
 chmod +x kubectl-debug
 mv kubectl-debug /usr/local/bin
 
@@ -74,7 +76,8 @@ mv kubectl-debug /usr/local/bin
 # Extra options
 ######################
 
-# build 'debug-agent' binary only - you wont need this. This is the binary/executable that the 'debug-agent container' contains. 
+# build 'debug-agent' binary only - you wont need this. This is the binary/executable that 
+# the 'debug-agent container' contains. 
 # The dockerfile of the debug-agent container refers to this binary.
 make debug-agent-binary
 
@@ -95,21 +98,28 @@ make
 # print the help
 kubectl-debug -h
 
-# start the debug container in the same namespace, and cgroup etc as container 'CONTAINER_NAME' in pod 'POD_NAME' in namespace 'NAMESPACE'
+# start the debug container in the same namespace, and cgroup etc as container 'CONTAINER_NAME' in
+#  pod 'POD_NAME' in namespace 'NAMESPACE'
 kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME
 
 # in case of your pod stuck in `CrashLoopBackoff` state and cannot be connected to,
 # you can fork a new pod and diagnose the problem in the forked pod
 kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --fork
 
-# In 'fork' mode, if you want the copied pod to retain the labels of the original pod, you can use the --fork-pod-retain-labels parameter (comma separated, no spaces). If not set (default), this parameter is empty and so any labels of the original pod are not retained, and the labels of the copied pods are empty.
+# In 'fork' mode, if you want the copied pod to retain the labels of the original pod, you can use 
+# the --fork-pod-retain-labels parameter (comma separated, no spaces). If not set (default), this parameter 
+# is empty and so any labels of the original pod are not retained, and the labels of the copied pods are empty.
 # Example of fork mode:
 kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --fork --fork-pod-retain-labels=<labelKeyA>,<labelKeyB>,<labelKeyC>
 
-# in order to interact with the debug-agent pod on a node which doesn't have a public IP or direct access (firewall and other reasons) to access, port-forward mode is enabled by default. If you don't want port-forward mode, you can use --port-forward false to turn off it. I don't know why you'd want to do this, but you can if you want.
+# in order to interact with the debug-agent pod on a node which doesn't have a public IP or direct access 
+# (firewall and other reasons) to access, port-forward mode is enabled by default. If you don't want 
+# port-forward mode, you can use --port-forward false to turn off it. I don't know why you'd want to do 
+# this, but you can if you want.
 kubectl-debug --port-forward=false --namespace NAMESPACE POD_NAME -c CONTAINER_NAME
 
-# you can choose a different debug container image. By default, nicolaka/netshoot:latest will be used but you can specify anything you like
+# you can choose a different debug container image. By default, nicolaka/netshoot:latest will be 
+# used but you can specify anything you like
 kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --image nicolaka/netshoot:latest 
 
 # you can set the debug-agent pod's resource limits/requests, for example:
@@ -121,7 +131,8 @@ kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --agent-pod-cpu-r
 # please set the secret data source as {Username: <username>, Password: <password>}
 kubectl-debug --namespace NAMESPACE POD_NAME --image nicolaka/netshoot:latest --registry-secret-name <k8s_secret_name> --registry-secret-namespace <namespace>
 
-# in addition to passing cli arguments, you can use a config file if you would like to non-default values for various things.
+# in addition to passing cli arguments, you can use a config file if you would like to 
+# non-default values for various things.
 kubectl-debug --configfile /PATH/FILENAME --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME
 
 ```
