@@ -67,9 +67,11 @@ make kubectl-debug-binary
 chmod +x kubectl-debug
 mv kubectl-debug /usr/local/bin
 
-####
+
+
+#####################
 # Extra options
-####
+######################
 
 # build 'debug-agent' binary only - you wont need this. This is the binary/executable that the 'debug-agent container' contains. 
 # The dockerfile of the debug-agent container refers to this binary.
@@ -124,11 +126,11 @@ kubectl-debug --configfile /PATH/FILENAME --namespace NAMESPACE POD_NAME -c TARG
 ```
 ## Debugging examples
 
-This guide will walk-through the typical debugging workflow of `kubectl-debug`.
+This guide shows a few typical example of debugging a target container.
 
 ### Basic
 
-When you run `kubectl-debug` it causes a 'debug container' to be created which runs in the same `pid`, `network`, `ipc` and `user` namespace of the target container.
+When you run `kubectl-debug` it causes a 'debug container' to be created on the same node, and which runs in the same `pid`, `network`, `ipc` and `user` namespace as the target container.
 By default, `kubectl-debug` uses [`nicolaka/netshoot`](https://github.com/nicolaka/netshoot) as container image for the 'debug container'.
 The netshoot [project documentation](https://github.com/nicolaka/netshoot/blob/master/README.md) provides excellent guides and examples for using various tools to troubleshoot your target container.
 
@@ -137,11 +139,11 @@ Here are a few examples to show `netshoot` working with `kubectl-debug`:
 Connect to a running container 'demo-container' in pod 'demo-pod' in the default namespace:
 
 ```shell
-➜  ~ kubectl-debug demo-pod -c demo-container
+➜  ~ kubectl-debug --namespace default target-pod -c target-container
 
 Agent Pod info: [Name:debug-agent-pod-da46a000-8429-11e9-a40c-8c8590147766, Namespace:default, Image:jamesgrantmediakind/debug-agent:latest, HostPort:10027, ContainerPort:10027]
 Waiting for pod debug-agent-pod-da46a000-8429-11e9-a40c-8c8590147766 to run...
-pod demo-pod PodIP 10.233.111.78, agentPodIP 172.16.4.160
+pod target-pod pod IP: 10.233.111.78, agentPodIP 172.16.4.160
 wait for forward port to debug agent ready...
 Forwarding from 127.0.0.1:10027 -> 10027
 Forwarding from [::1]:10027 -> 10027
@@ -154,12 +156,14 @@ starting debug container...
 container created, open tty...
 
  [1] 🐳  → hostname
-demo-container
+target-container
 ```
 
-The root filesystem of target container is located in `/proc/{pid}/root/`, and the `pid` is typically '1' 
-You can `chroot` to the root filesystem of target container to navigate the target container filesystem
-`cd /proc/1/root` works just as well (assuming PID '1' is the correct PID)
+Navigating the filesystem of the target container:
+
+The root filesystem of target container is located in `/proc/{pid}/root/`, and the `pid` is typically '1'. 
+You can `chroot` to the root filesystem of target container to navigate the target container filesystem or
+`cd /proc/1/root` works just as well (assuming PID '1' is the correct PID).
 
 ```shell
 root @ /
@@ -228,7 +232,7 @@ root @ /
 
 ### `proc` filesystem and FUSE
 
-It is common to use tools like `top`, `free` to inspect system metrics like CPU usage and memory. Using these commands will display the metrics from the host system by default. Because they read the metrics from the `proc` filesystem (`/proc/*`), which is mounted from the host system. This can be extremely useful (you can still inspect the pod/container metrics of as part of the host metrics) You may find [this blog post](https://fabiokung.com/2014/03/13/memory-inside-linux-containers/) useful if you want to investigate this problem in depth.
+It is common to use tools like `top`, `free` to inspect system metrics like CPU usage and memory. Using these commands will display the metrics from the host system by default. Because they read the metrics from the `proc` filesystem (`/proc/*`), which is mounted from the host system. This can be extremely useful (you can still inspect the pod/container metrics of as part of the host metrics) You may find [this blog post](https://fabiokung.com/2014/03/13/memory-inside-linux-containers/) useful.
 
 ## Debug Pod in "CrashLoopBackoff"
 
