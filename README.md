@@ -50,11 +50,13 @@ How does it work?
 ```bash
 export RELEASE_VERSION=1.0.0
 # linux x86_64
-curl -Lo kubectl-debug.tar.gz https://github.com/JamesTGrant/kubectl-debug/releases/download/v${RELEASE_VERSION}/kubectl-debug_${RELEASE_VERSION}_linux_amd64.tar.gz
+curl -Lo kubectl-debug https://github.com/JamesTGrant/kubectl-debug/releases/download/v${RELEASE_VERSION}/kubectl-debug
 
-tar -zxvf kubectl-debug.tar.gz kubectl-debug
+# make the binary executable
 chmod +x kubectl-debug
-sudo mv kubectl-debug /usr/local/bin/
+
+# run the binary pointing at whatever cluster kubectl points at
+./kubectl-debug --namespace NAMESPACE TARGET_POD_NAME -c TARGET_CONTAINER_NAME
 ```
 ## Build from source
 
@@ -98,7 +100,7 @@ make
 # print the help
 kubectl-debug -h
 
-# start the debug container in the same namespace, and cgroup etc as container 'CONTAINER_NAME' in
+# start the debug container in the same namespace, and cgroup etc as container 'TARGET_CONTAINER_NAME' in
 #  pod 'POD_NAME' in namespace 'NAMESPACE'
 kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME
 
