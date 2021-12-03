@@ -142,7 +142,7 @@ This guide shows a few typical example of debugging a target container.
 
 ### Basic
 
-When you run `kubectl-debug` it causes a 'debug container' to be created on the same node, and which runs in the same `pid`, `network`, `ipc` and `user` namespace as the target container.
+When you run `kubectl-debug` it causes a 'debug container' to be created on the same node, and which runs in the same `pid`, `network`, `ipc` and `user` namespace, as the target container.
 By default, `kubectl-debug` uses [`nicolaka/netshoot`](https://github.com/nicolaka/netshoot) as container image for the 'debug container'.
 The netshoot [project documentation](https://github.com/nicolaka/netshoot/blob/master/README.md) provides excellent guides and examples for using various tools to troubleshoot your target container.
 
@@ -170,7 +170,8 @@ container created, open tty...
  [1] 🐳  → hostname
 target-container
 ```
-
+  
+  
 Navigating the filesystem of the target container:
 
 The root filesystem of target container is located in `/proc/{pid}/root/`, and the `pid` is typically '1'. 
@@ -194,8 +195,8 @@ root @ /
  [#] 🐳  → ./entrypoint.sh
  (you can attempt to run the target containers entrypoint.sh script and perhaps see what errors are produced)
 ```
-
-
+  
+  
 Using **iftop** to inspect network traffic:
 ```shell
 root @ /
@@ -205,7 +206,8 @@ IP address is: 10.233.111.78
 MAC address is: 86:c3:ae:9d:46:2b
 (CLI graph omitted)
 ```
-
+  
+  
 Using **drill** to diagnose DNS:
 ```shell
 root @ /
@@ -281,8 +283,8 @@ PID   USER     TIME  COMMAND
     7 root      0:00 /bin/bash -l
    15 root      0:00 ps -ef
 ```
-
-
+  
+  
 ## Debug init container
 
 Just like debugging the ordinary container, we can debug the init-container of a pod. You must specify the container name of init-container:
@@ -290,8 +292,8 @@ Just like debugging the ordinary container, we can debug the init-container of a
 ```shell
 ➜  ~ kubectl-debug demo-pod -c init-container
 ```
-
-
+  
+  
 # Under the hood
 
 `kubectl-debug` consists of 3 components:
