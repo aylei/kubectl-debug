@@ -43,7 +43,7 @@ func (s *Server) Run() error {
 	}()
 	<-stop
 
-	log.Println("shutting done server...")
+	log.Println("shutting down server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
