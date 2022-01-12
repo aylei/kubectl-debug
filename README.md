@@ -1,3 +1,7 @@
+# Deprecation Notice
+
+This repository is no longer maintained, please checkout https://github.com/JamesTGrant/kubectl-debug.
+
 # Kubectl-debug
 
 ![license](https://img.shields.io/hexpm/l/plug.svg)
