@@ -450,6 +450,8 @@ Refer to [the official Kubernetes documentation on Secrets](https://kubernetes.i
 # Roadmap
 
 `kubectl-debug` has been replaced by kubernetes [ephemeral containers](https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers). At the time of writing, ephemeral containers feature is still in alpha (Kubernetes current release is 1.22.4). In Kuberenetes, by default, you are required to explicitly enable alpha features (alpha features are not enabled by default). If you are using Azure AKS (and perhaps others) you are not able, nor permitted, to configure kubernetes feature flags and so you will need a solution like the one provided by this github project.
+  
+Jan '22 - plan to add support for k3s enviroments
 
 
 # Contribute
