@@ -127,7 +127,7 @@ type DebugOptions struct {
 	RegistrySecretName      string
 	RegistrySecretNamespace string
 	RegistrySkipTLSVerify   bool
-	IsLxcfsEnabled 			 bool
+	IsLxcfsEnabled 			bool
 	ContainerName       	string
 	Command             	[]string
 	AppName             	string
@@ -568,6 +568,7 @@ func (o *DebugOptions) Validate() error {
 func (o *DebugOptions) Run() error {
 	pod, err := o.CoreClient.Pods(o.Namespace).Get(o.PodName, v1.GetOptions{})
 	if err != nil {
+		o.Logger.Printf("error with pod spec")
 		return err
 	}
 
@@ -694,6 +695,7 @@ func (o *DebugOptions) Run() error {
 		}
 		uri, err := url.Parse(fmt.Sprintf("http://%s:%d", targetHost, o.AgentPort))
 		if err != nil {
+			o.Logger.Printf("error parsing url http://%s:%d", targetHost, o.AgentPort))
 			return err
 		}
 		uri.Path = fmt.Sprintf("/api/v1/debug")
@@ -761,7 +763,7 @@ func (o *DebugOptions) Run() error {
 			}
 			// delete agent pod
 			if o.CreateDebugAgentPod && agentPod != nil {
-				fmt.Fprintf(o.Out, "\n\rdeleting debug-agent container from pod: %s \n\r", pod.Name)
+				fmt.Fprintf(o.Out, "\n\rdeleting debug-agent pod\n\r")
 				o.deleteAgent(agentPod)
 			}
 		}).Run(fn)
@@ -945,11 +947,13 @@ func copyAndStripPod(pod *corev1.Pod, targetContainer string, podLabels map[stri
 func (o *DebugOptions) launchPod(pod *corev1.Pod) (*corev1.Pod, error) {
 	pod, err := o.CoreClient.Pods(pod.Namespace).Create(pod)
 	if err != nil {
+		o.Logger.Printf("error with launch pod")
 		return pod, err
 	}
 
 	watcher, err := o.CoreClient.Pods(pod.Namespace).Watch(v1.SingleObject(pod.ObjectMeta))
 	if err != nil {
+		o.Logger.Printf("error with watching pod")
 		return nil, err
 	}
 	// FIXME: hard code -> config
@@ -1153,11 +1157,13 @@ type defaultPortForwarder struct {
 func (f *defaultPortForwarder) ForwardPorts(method string, url *url.URL, opts *DebugOptions) error {
 	transport, upgrader, err := spdy.RoundTripperFor(opts.Config)
 	if err != nil {
+		o.Logger.Printf("error with setting up spdy forwarder")
 		return err
 	}
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, method, url)
 	fw, err := portforward.New(dialer, opts.Ports, opts.StopChannel, opts.ReadyChannel, f.Out, f.ErrOut)
 	if err != nil {
+		o.Logger.Printf("error with NewDialer")
 		return err
 	}
 	return fw.ForwardPorts()

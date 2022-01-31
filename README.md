@@ -353,6 +353,8 @@ portForward: true
 
 # the 'debug container' image
 # default: nicolaka/netshoot:latest
+# for most reliable result, use the full path - for example: docker.io/library/busybox:latest will
+# work but busybox:latest may not (depending on the cluster)
 image: nicolaka/netshoot:latest
 
 # start command of the debug container
