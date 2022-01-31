@@ -20,12 +20,12 @@
 
 # Overview
 
-This project is a fork of this fine project: https://github.com/aylei/kubectl-debug  
-I have made several changes which may never be accepted as a PR on [that project](https://github.com/aylei/kubectl-debug) (hence this fork). The credit for this project belongs with [aylei](https://github.com/aylei)
+This project is a fork of this fine project: https://github.com/aylei/kubectl-debug which is no longer maintained (hence this fork). The credit for this project belongs with [aylei](https://github.com/aylei). Aylei and I have chatted and we are happy that this project will live on and get maintained here.
 
 `kubectl-debug` is an 'out-of-tree' solution for connecting to and troubleshooting an existing, running, 'target' container in an existing pod in a Kubernetes cluster.
 The target container may have a shell and busybox utils and hence provide some debug capability or it may be very minimal and not even provide a shell - which makes any real-time troubleshooting/debugging very difficult. kubectl-debug is designed to overcome that difficulty.
 
+There's a short video on YouTube: https://www.youtube.com/watch?v=jJHCxCqPn1g
 
 How does it work?  
 <dd>
@@ -449,9 +449,13 @@ Refer to [the official Kubernetes documentation on Secrets](https://kubernetes.i
 
 # Roadmap
 
-`kubectl-debug` has been replaced by kubernetes [ephemeral containers](https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers). At the time of writing, ephemeral containers feature is still in alpha (Kubernetes current release is 1.22.4). In Kuberenetes, by default, you are required to explicitly enable alpha features (alpha features are not enabled by default). If you are using Azure AKS (and perhaps others) you are not able, nor permitted, to configure kubernetes feature flags and so you will need a solution like the one provided by this github project.
-  
 Jan '22 - plan to add support for k3s enviroments
+  
+`kubectl-debug` has been replaced by kubernetes [ephemeral containers](https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers).
+ Ephemeral containers feature is in beta from kubernetes 1.23
+ Ephemeral containers feature is in alpha from kubernetes 1.16 to 1.22
+  
+ In Kuberenetes, by default, you are required to explicitly enable alpha features (alpha features are not enabled by default). If you are using Azure AKS (and perhaps others) you are not able, nor permitted, to configure kubernetes feature flags and so you will need a solution like the one provided by this github project.
 
 
 # Contribute
@@ -460,5 +464,5 @@ Feel free to open issues and pull requests. Any feedback is much appreciated!
 
 # Acknowledgement
 
-This project is a fork of [this project](https://github.com/aylei/kubectl-debug) which I think is no longer maintained (hence this fork).
+This project is a fork of [this project](https://github.com/aylei/kubectl-debug) which is no longer maintained (hence this fork).
 This project would not be here without the effort of [aylei contributors](https://github.com/aylei/kubectl-debug/graphs/contributors) and [this fork](https://github.com/JamesTGrant/kubectl-debug/graphs/contributors)
