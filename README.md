@@ -40,8 +40,10 @@ How does it work?
   
 `kubectl-debug` is not related to `kubectl debug`
   
-`kubectl-debug` has been largely replaced by kubernetes [ephemeral containers](https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers). At the time of writing, ephemeral containers are still in alpha (Kubernetes current release is 1.22.4). You are required to explicitly enable alpha features (alpha features are not enabled by default). If you are using Azure AKS (and perhaps others) you are not able, nor permitted, to configure kubernetes feature flags and so you will need a solution like the one provided by this github project.
-
+`kubectl-debug` has been largely replaced by kubernetes [ephemeral containers](https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers).
+ Ephemeral containers feature is in beta (enabled by default) from kubernetes 1.23
+ Ephemeral containers feature is in alpha from kubernetes 1.16 to 1.22
+ In Kuberenetes, by default, you are required to explicitly enable alpha features (alpha features are not enabled by default). If you are using Azure AKS (and perhaps others) you are not able, nor permitted, to configure kubernetes feature flags and so you will need a solution like the one provided by this github project.
 
 # Quick start
 
