@@ -2,8 +2,8 @@ package main
 
 import (
 	"flag"
-	"log"
 	"github.com/jamestgrant/kubectl-debug/pkg/debug-agent"
+	"log"
 )
 
 func main() {
