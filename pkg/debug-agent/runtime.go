@@ -22,8 +22,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/jamestgrant/kubectl-debug/pkg/nsenter"
-	term "github.com/jamestgrant/kubectl-debug/pkg/util"
 	containerd "github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/content"
@@ -41,6 +39,8 @@ import (
 	dockerclient "github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/google/uuid"
+	"github.com/jamestgrant/kubectl-debug/pkg/nsenter"
+	term "github.com/jamestgrant/kubectl-debug/pkg/util"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/opencontainers/runtime-spec/specs-go"

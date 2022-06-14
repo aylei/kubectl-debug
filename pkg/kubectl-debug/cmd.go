@@ -15,8 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jamestgrant/kubectl-debug/version"
-	term "github.com/jamestgrant/kubectl-debug/pkg/util"
 	dockerterm "github.com/docker/docker/pkg/term"
 	"github.com/rs/xid"
 	"github.com/spf13/cobra"
@@ -40,6 +38,9 @@ import (
 	"k8s.io/kubernetes/pkg/client/conditions"
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 	"k8s.io/kubernetes/pkg/util/interrupt"
+
+	term "github.com/jamestgrant/kubectl-debug/pkg/util"
+	"github.com/jamestgrant/kubectl-debug/version"
 )
 
 const (
@@ -88,64 +89,63 @@ const (
 	may be very minimal and not even provide a shell - which makes any real-time troubleshooting/debugging 
 	very difficult. kubectl-debug is designed to overcome that difficulty.
 `
-    usageError 								= "run like this: kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME"
-    defaultDebugContainerImage          	= "docker.io/nicolaka/netshoot:latest"
+	usageError                 = "run like this: kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME"
+	defaultDebugContainerImage = "docker.io/nicolaka/netshoot:latest"
 
-	defaultDebugAgentPort      				= 10027
-	defaultDebugAgentConfigFileLocation 	= "/tmp/debugAgentConfigFile"
-	defaultDebugAgentImage               	= "jamesgrantmediakind/debug-agent:latest"
-	defaultDebugAgentImagePullPolicy     	= string(corev1.PullIfNotPresent)
-	defaultDebugAgentImagePullSecretName	= ""
-	defaultDebugAgentPodNamePrefix      	= "debug-agent-pod"
-	defaultDebugAgentPodNamespace       	= "default"
-	defaultDebugAgentPodCpuRequests     	= ""
-	defaultDebugAgentPodCpuLimits        	= ""
-	defaultDebugAgentPodMemoryRequests   	= ""
-	defaultDebugAgentPodMemoryLimits     	= ""
-	defaultDebugAgentDaemonSetName  		= "debug-agent"
+	defaultDebugAgentPort                = 10027
+	defaultDebugAgentConfigFileLocation  = "/tmp/debugAgentConfigFile"
+	defaultDebugAgentImage               = "jamesgrantmediakind/debug-agent:latest"
+	defaultDebugAgentImagePullPolicy     = string(corev1.PullIfNotPresent)
+	defaultDebugAgentImagePullSecretName = ""
+	defaultDebugAgentPodNamePrefix       = "debug-agent-pod"
+	defaultDebugAgentPodNamespace        = "default"
+	defaultDebugAgentPodCpuRequests      = ""
+	defaultDebugAgentPodCpuLimits        = ""
+	defaultDebugAgentPodMemoryRequests   = ""
+	defaultDebugAgentPodMemoryLimits     = ""
+	defaultDebugAgentDaemonSetName       = "debug-agent"
 
-	defaultRegistrySecretName      			= "kubectl-debug-registry-secret"
-	defaultRegistrySecretNamespace 			= "default"
-	defaultRegistrySkipTLSVerify   			= false
-	defaultPortForward 						= true
-	defaultCreateDebugAgentPod   			= true
-	defaultLxcfsEnable 						= true
-	defaultVerbosity   						= 0	
+	defaultRegistrySecretName      = "kubectl-debug-registry-secret"
+	defaultRegistrySecretNamespace = "default"
+	defaultRegistrySkipTLSVerify   = false
+	defaultPortForward             = true
+	defaultCreateDebugAgentPod     = true
+	defaultLxcfsEnable             = true
+	defaultVerbosity               = 0
 )
 
 // DebugOptions specify how to run debug container in a running pod
 type DebugOptions struct {
 
 	// target pod select options
-	Namespace 				string
-	PodName   				string
-	Fork                	bool
-	ForkPodRetainLabels 	[]string
+	Namespace           string
+	PodName             string
+	Fork                bool
+	ForkPodRetainLabels []string
 
 	// Debug-container options
 	Image                   string
 	RegistrySecretName      string
 	RegistrySecretNamespace string
 	RegistrySkipTLSVerify   bool
-	IsLxcfsEnabled 			bool
-	ContainerName       	string
-	Command             	[]string
-	AppName             	string
-	ConfigLocation      	string
-	
+	IsLxcfsEnabled          bool
+	ContainerName           string
+	Command                 []string
+	AppName                 string
+	ConfigLocation          string
+
 	// Debug-agent options
 	CreateDebugAgentPod      bool
 	AgentImage               string
-	AgentPort           	 int
+	AgentPort                int
 	AgentImagePullPolicy     string
 	AgentImagePullSecretName string
-	
-	// agentPodName = agentPodNamePrefix + nodeName
-	AgentPodName      		 string
-	AgentPodNamespace 		 string
-	AgentPodNode      		 string
-	AgentPodResource  agentPodResources
 
+	// agentPodName = agentPodNamePrefix + nodeName
+	AgentPodName      string
+	AgentPodNamespace string
+	AgentPodNode      string
+	AgentPodResource  agentPodResources
 
 	Flags      *genericclioptions.ConfigFlags
 	CoreClient coreclient.CoreV1Interface
@@ -215,13 +215,13 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 		fmt.Sprintf("the debug container image, default: %s", defaultDebugContainerImage))
 
 	cmd.Flags().StringVar(&opts.RegistrySecretName, "registry-secret-name", "",
-	    fmt.Sprintf("private registry secret name, default:  %s", defaultRegistrySecretName))
+		fmt.Sprintf("private registry secret name, default:  %s", defaultRegistrySecretName))
 
 	cmd.Flags().StringVar(&opts.RegistrySecretNamespace, "registry-secret-namespace", "",
-	    fmt.Sprintf("private registry secret namespace, default: %s", defaultRegistrySecretNamespace))
+		fmt.Sprintf("private registry secret namespace, default: %s", defaultRegistrySecretNamespace))
 
 	cmd.Flags().BoolVar(&opts.RegistrySkipTLSVerify, "registry-skip-tls-verify", false,
-	    fmt.Sprintf("if true, the registry's certificate will not be checked for validity. This will make your HTTPS connections insecure, default: %s", defaultRegistrySkipTLSVerify))
+		fmt.Sprintf("if true, the registry's certificate will not be checked for validity. This will make your HTTPS connections insecure, default: %s", defaultRegistrySkipTLSVerify))
 
 	cmd.Flags().StringSliceVar(&opts.ForkPodRetainLabels, "fork-pod-retain-labels", []string{},
 		"list of pod labels to retain when in fork mode, default: not set")
@@ -243,7 +243,7 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 
 	// it may be that someone has already deployed a daemonset containing with the debug-agent pod and so we can use that (create-debug-agent-pod must be 'false' for this param to be used)
 	cmd.Flags().StringVar(&opts.DebugAgentDaemonSet, "daemonset-name", opts.DebugAgentDaemonSet,
-		fmt.Sprintf("debug agent daemonset name when using port-forward, default: %s",defaultDebugAgentDaemonSetName))
+		fmt.Sprintf("debug agent daemonset name when using port-forward, default: %s", defaultDebugAgentDaemonSetName))
 
 	cmd.Flags().StringVar(&opts.DebugAgentNamespace, "debug-agent-namespace", opts.DebugAgentNamespace,
 		fmt.Sprintf("namespace in which to create the debug-agent pod, default: %s", defaultDebugAgentPodNamespace))
@@ -488,7 +488,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 			o.IsLxcfsEnabled = defaultLxcfsEnable
 		}
 	}
-	
+
 	if !o.CreateDebugAgentPod {
 		if config.CreateDebugAgentPod {
 			o.CreateDebugAgentPod = config.CreateDebugAgentPod
@@ -641,7 +641,7 @@ func (o *DebugOptions) Run() error {
 		if !o.CreateDebugAgentPod {
 			// See if there is a debug-agent pod running as a daemonset
 			o.Logger.Printf("See if there is a debug-agent pod running in a daemonset. daemonset '%v' from namespace %v\r\n", o.DebugAgentDaemonSet, o.DebugAgentNamespace)
-		
+
 			daemonSet, err := o.KubeCli.AppsV1().DaemonSets(o.DebugAgentNamespace).Get(o.DebugAgentDaemonSet, v1.GetOptions{})
 			if err != nil {
 				return err
@@ -695,7 +695,7 @@ func (o *DebugOptions) Run() error {
 		}
 		uri, err := url.Parse(fmt.Sprintf("http://%s:%d", targetHost, o.AgentPort))
 		if err != nil {
-			o.Logger.Printf("error parsing url http://%s:%d", targetHost, o.AgentPort))
+			o.Logger.Printf("error parsing url http://%s:%d", targetHost, o.AgentPort)
 			return err
 		}
 		uri.Path = fmt.Sprintf("/api/v1/debug")
@@ -1103,7 +1103,7 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 							Path: "/var/lib/containerd",
 						},
 					},
-				},				
+				},
 				{
 					Name: "runrunc",
 					VolumeSource: corev1.VolumeSource{
@@ -1157,13 +1157,13 @@ type defaultPortForwarder struct {
 func (f *defaultPortForwarder) ForwardPorts(method string, url *url.URL, opts *DebugOptions) error {
 	transport, upgrader, err := spdy.RoundTripperFor(opts.Config)
 	if err != nil {
-		o.Logger.Printf("error with setting up spdy forwarder")
+		opts.Logger.Printf("error with setting up spdy forwarder")
 		return err
 	}
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, method, url)
 	fw, err := portforward.New(dialer, opts.Ports, opts.StopChannel, opts.ReadyChannel, f.Out, f.ErrOut)
 	if err != nil {
-		o.Logger.Printf("error with NewDialer")
+		opts.Logger.Printf("error with NewDialer")
 		return err
 	}
 	return fw.ForwardPorts()
