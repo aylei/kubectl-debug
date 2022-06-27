@@ -1,4 +1,4 @@
-package agent
+package debugagent
 
 import (
 	"bufio"
@@ -22,8 +22,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/aylei/kubectl-debug/pkg/nsenter"
-	term "github.com/aylei/kubectl-debug/pkg/util"
 	containerd "github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/content"
@@ -41,6 +39,8 @@ import (
 	dockerclient "github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/google/uuid"
+	"github.com/jamestgrant/kubectl-debug/pkg/nsenter"
+	term "github.com/jamestgrant/kubectl-debug/pkg/util"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -980,7 +980,7 @@ func (a *DebugAttacher) AttachContainer(name string, uid kubetype.UID, container
 func (m *DebugAttacher) DebugContainer(cfg RunConfig) error {
 
 	if m.verbosity > 0 {
-		log.Printf("Accept new debug request:\n\t target container: %s \n\t image: %s \n\t command: %v \n", m.idOfContainerToDebug, m.image, m.command)
+		log.Printf("Accept new debug request:\n\t target container: %s \n\t image: %s \n\t command: %v \n\r", m.idOfContainerToDebug, m.image, m.command)
 	}
 
 	// the following steps may takes much time,
@@ -1008,9 +1008,9 @@ func (m *DebugAttacher) DebugContainer(cfg RunConfig) error {
 	//		}
 	//	}
 	//} ()
-	// step 0: set container procfs correct by lxcfs
+	// step 0: set container procfs to lxcfs
 	if cfg.verbosity > 0 {
-		cfg.stdout.Write([]byte(fmt.Sprintf("set container procfs correct %t .. \n\r", m.lxcfsEnabled)))
+		cfg.stdout.Write([]byte(fmt.Sprintf("set container procfs lxcfs: %t .. \n\r", m.lxcfsEnabled)))
 	}
 	if m.lxcfsEnabled {
 		if err := CheckLxcfsMount(); err != nil {
@@ -1026,9 +1026,9 @@ func (m *DebugAttacher) DebugContainer(cfg RunConfig) error {
 	if cfg.verbosity > 0 {
 		cfg.stdout.Write([]byte(fmt.Sprintf("pulling image %s, skip TLS %v... \n\r", m.image, m.registrySkipTLS)))
 	}
-	err := m.containerRuntime.PullImage(m.context, m.image,
-		m.registrySkipTLS, m.authStr, cfg)
+	err := m.containerRuntime.PullImage(m.context, m.image, m.registrySkipTLS, m.authStr, cfg)
 	if err != nil {
+		cfg.stdout.Write([]byte(fmt.Sprintf("pulling image %s, \n\r", m.image)))
 		return err
 	}
 

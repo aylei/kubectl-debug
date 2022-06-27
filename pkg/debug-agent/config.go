@@ -1,11 +1,10 @@
-package agent
+package debugagent
 
 import (
 	"fmt"
+	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"time"
-
-	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -15,11 +14,9 @@ var (
 		RuntimeTimeout:        30 * time.Second,
 		StreamIdleTimeout:     10 * time.Minute,
 		StreamCreationTimeout: 15 * time.Second,
-
-		ListenAddress: "0.0.0.0:10027",
-
-		AuditFifo: "/var/data/kubectl-debug-audit-fifo/KCTLDBG-CONTAINER-ID",
-		AuditShim: []string{"/usr/bin/strace", "-o", "KCTLDBG-FIFO", "-f", "-e", "trace=/exec"},
+		ListenAddress:         "0.0.0.0:10027",
+		AuditFifo:             "/var/data/kubectl-debug-audit-fifo/KCTLDBG-CONTAINER-ID",
+		AuditShim:             []string{"/usr/bin/strace", "-o", "KCTLDBG-FIFO", "-f", "-e", "trace=/exec"},
 	}
 )
 
@@ -29,13 +26,11 @@ type Config struct {
 	RuntimeTimeout        time.Duration `yaml:"runtime_timeout,omitempty"`
 	StreamIdleTimeout     time.Duration `yaml:"stream_idle_timeout,omitempty"`
 	StreamCreationTimeout time.Duration `yaml:"stream_creation_timeout,omitempty"`
-
-	ListenAddress string `yaml:"listen_address,omitempty"`
-	Verbosity     int    `yaml:"verbosity,omitempty"`
-
-	Audit     bool     `yaml:"audit,omitempty"`
-	AuditFifo string   `yaml:"audit_fifo,omitempty"`
-	AuditShim []string `yaml:"audit_shim,omitempty"`
+	ListenAddress         string        `yaml:"listen_address,omitempty"`
+	Verbosity             int           `yaml:"verbosity,omitempty"`
+	Audit                 bool          `yaml:"audit,omitempty"`
+	AuditFifo             string        `yaml:"audit_fifo,omitempty"`
+	AuditShim             []string      `yaml:"audit_shim,omitempty"`
 }
 
 func Load(s string) (*Config, error) {
@@ -55,7 +50,7 @@ func Load(s string) (*Config, error) {
 
 func LoadFile(filename string) (*Config, error) {
 	if len(filename) < 1 {
-		fmt.Println("No config file provided.  Using all default values.")
+		fmt.Println("No config file provided. Using default values.\r\n")
 		return &DefaultConfig, nil
 	}
 	fmt.Printf("Reading config file %v.\r\n", filename)

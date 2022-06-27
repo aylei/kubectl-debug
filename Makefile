@@ -1,4 +1,4 @@
-.PHONY: build plugin agent check
+.PHONY: build kubectl-debug-binary debug-agent-binary debug-agent-docker-image check
 
 LDFLAGS = $(shell ./version.sh)
 GOENV  := GO15VENDOREXPERIMENT="1" GO111MODULE=on CGO_ENABLED=0 GOOS=linux GOARCH=amd64
@@ -6,16 +6,16 @@ GO := $(GOENV) go
 
 default: build
 
-build: plugin agent-docker
+build: kubectl-debug-binary debug-agent-docker-image
 
-plugin:
-	GO111MODULE=on CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o kubectl-debug cmd/plugin/main.go
+kubectl-debug-binary:
+	GO111MODULE=on CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o kubectl-debug cmd/kubectl-debug/main.go
 
-agent-docker: agent
-	docker build . -t aylei/debug-agent:latest
+debug-agent-docker-image: debug-agent-binary
+	docker build . -t jamesgrantmediakind/debug-agent:latest
 
-agent:
-	$(GO) build -ldflags '$(LDFLAGS)' -o debug-agent cmd/agent/main.go
+debug-agent-binary:
+	$(GO) build -ldflags '$(LDFLAGS)' -o debug-agent cmd/debug-agent/main.go
 
 check:
 	find . -iname '*.go' -type f | grep -v /vendor/ | xargs gofmt -l

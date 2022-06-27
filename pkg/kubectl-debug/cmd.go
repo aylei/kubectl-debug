@@ -1,4 +1,4 @@
-package plugin
+package kubectldebug
 
 import (
 	"context"
@@ -10,15 +10,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/user"
 	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
 
-	"github.com/aylei/kubectl-debug/version"
-
-	term "github.com/aylei/kubectl-debug/pkg/util"
 	dockerterm "github.com/docker/docker/pkg/term"
 	"github.com/rs/xid"
 	"github.com/spf13/cobra"
@@ -42,97 +38,114 @@ import (
 	"k8s.io/kubernetes/pkg/client/conditions"
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 	"k8s.io/kubernetes/pkg/util/interrupt"
+
+	term "github.com/jamestgrant/kubectl-debug/pkg/util"
+	"github.com/jamestgrant/kubectl-debug/version"
 )
 
 const (
 	example = `
-	# debug a container in the running pod, the first container will be picked by default
-	kubectl debug POD_NAME
-
-	# specify namespace or container
-	kubectl debug --namespace foo POD_NAME -c CONTAINER_NAME
-
-	# override the default troubleshooting image
-	kubectl debug POD_NAME --image aylei/debug-jvm
-
-	# override entrypoint of debug container
-	kubectl debug POD_NAME --image aylei/debug-jvm /bin/bash
-
-	# override the debug config file
-	kubectl debug POD_NAME --debug-config ./debug-config.yml
-
-	# check version
-	kubectl --version
+	# print the help
+	kubectl-debug -h
+	
+	# start the debug container in the same namespace, and cgroup etc as container 'CONTAINER_NAME' 
+	# in pod 'POD_NAME' in namespace 'NAMESPACE'
+	kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME
+	
+	# in case of your pod stuck in CrashLoopBackoff state and cannot be connected to,
+	# you can fork a new pod and diagnose the problem in the forked pod
+	kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --fork
+	
+	# In 'fork' mode, if you want the copied pod to retain the labels of the original pod, you can 
+	# use the --fork-pod-retain-labels parameter (comma separated, no spaces). If not set (default), 
+	# this parameter is empty and so any labels of the original pod are not retained, and the labels 
+	# of the copied pods are empty.
+	# Example of fork mode:
+	kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --fork --fork-pod-retain-labels=<labelKeyA>,<labelKeyB>,<labelKeyC>
+	
+	# in order to interact with the debug-agent pod on a node which doesn't have a public IP or direct 
+	# access (firewall and other reasons) to access, port-forward mode is enabled by default. if you don't 
+	# want port-forward mode, you can use --port-forward false to turn off it. I don't know why you'd want 
+	# to do this, but you can if you want.
+	kubectl-debug --port-forward=false --namespace NAMESPACE POD_NAME -c CONTAINER_NAME
+	
+	# you can choose a different debug container image. By default, nicolaka/netshoot:latest will be used 
+	# but you can specify anything you like
+	kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --image nicolaka/netshoot:latest 
+	
+	# you can set the debug-agent pod's resource limits/requests, for example:
+	# default is not set
+	kubectl-debug --namespace NAMESPACE POD_NAME -c CONTAINER_NAME --agent-pod-cpu-requests=250m --agent-pod-cpu-limits=500m --agent-pod-memory-requests=200Mi --agent-pod-memory-limits=500Mi
+	
+	# use primary docker registry, set registry kubernetes secret to pull image
+	# the default registry-secret-name is kubectl-debug-registry-secret, the default namespace is default
+	# please set the secret data source as {Username: <username>, Password: <password>}
+	kubectl-debug --namespace NAMESPACE POD_NAME --image nicolaka/netshoot:latest --registry-secret-name <k8s_secret_name> --registry-secret-namespace <namespace>
 `
 	longDesc = `
-Run a container in a running pod, this container will join the namespaces of an existing container of the pod.
-
-You may set default configuration such as image and command in the config file, which locates in "~/.kube/debug-config" by default.
+	kubectl-debug is an 'out-of-tree' solution for connecting to and troubleshooting an existing, 
+	running, 'target' container in an existing pod in a Kubernetes cluster.
+	The target container may have a shell and busybox utils and hence provide some debug capability or it 
+	may be very minimal and not even provide a shell - which makes any real-time troubleshooting/debugging 
+	very difficult. kubectl-debug is designed to overcome that difficulty.
 `
-	defaultImage          = "docker.io/nicolaka/netshoot:latest"
-	defaultAgentPort      = 10027
-	defaultConfigLocation = "/.kube/debug-config"
-	defaultDaemonSetName  = "debug-agent"
-	defaultDaemonSetNs    = "default"
+	usageError                 = "run like this: kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME"
+	defaultDebugContainerImage = "docker.io/nicolaka/netshoot:latest"
 
-	usageError = "expects 'debug POD_NAME' for debug command"
-
-	defaultAgentImage               = "aylei/debug-agent:latest"
-	defaultAgentImagePullPolicy     = string(corev1.PullIfNotPresent)
-	defaultAgentImagePullSecretName = ""
-	defaultAgentPodNamePrefix       = "debug-agent-pod"
-	defaultAgentPodNamespace        = "default"
-	defaultAgentPodCpuRequests      = ""
-	defaultAgentPodCpuLimits        = ""
-	defaultAgentPodMemoryRequests   = ""
-	defaultAgentPodMemoryLimits     = ""
+	defaultDebugAgentPort                = 10027
+	defaultDebugAgentConfigFileLocation  = "/tmp/debugAgentConfigFile"
+	defaultDebugAgentImage               = "jamesgrantmediakind/debug-agent:latest"
+	defaultDebugAgentImagePullPolicy     = string(corev1.PullIfNotPresent)
+	defaultDebugAgentImagePullSecretName = ""
+	defaultDebugAgentPodNamePrefix       = "debug-agent-pod"
+	defaultDebugAgentPodNamespace        = "default"
+	defaultDebugAgentPodCpuRequests      = ""
+	defaultDebugAgentPodCpuLimits        = ""
+	defaultDebugAgentPodMemoryRequests   = ""
+	defaultDebugAgentPodMemoryLimits     = ""
+	defaultDebugAgentDaemonSetName       = "debug-agent"
 
 	defaultRegistrySecretName      = "kubectl-debug-registry-secret"
 	defaultRegistrySecretNamespace = "default"
 	defaultRegistrySkipTLSVerify   = false
-
-	defaultPortForward = true
-	defaultAgentless   = true
-	defaultLxcfsEnable = true
-	defaultVerbosity   = 0
-
-	enableLxcsFlag  = "enable-lxcfs"
-	portForwardFlag = "port-forward"
-	agentlessFlag   = "agentless"
+	defaultPortForward             = true
+	defaultCreateDebugAgentPod     = true
+	defaultLxcfsEnable             = true
+	defaultVerbosity               = 0
 )
 
 // DebugOptions specify how to run debug container in a running pod
 type DebugOptions struct {
 
-	// Pod select options
-	Namespace string
-	PodName   string
+	// target pod select options
+	Namespace           string
+	PodName             string
+	Fork                bool
+	ForkPodRetainLabels []string
 
-	// Debug options
+	// Debug-container options
 	Image                   string
 	RegistrySecretName      string
 	RegistrySecretNamespace string
 	RegistrySkipTLSVerify   bool
+	IsLxcfsEnabled          bool
+	ContainerName           string
+	Command                 []string
+	AppName                 string
+	ConfigLocation          string
 
-	ContainerName       string
-	Command             []string
-	AgentPort           int
-	AppName             string
-	ConfigLocation      string
-	Fork                bool
-	ForkPodRetainLabels []string
-	//used for agentless mode
-	AgentLess                bool
+	// Debug-agent options
+	CreateDebugAgentPod      bool
 	AgentImage               string
+	AgentPort                int
 	AgentImagePullPolicy     string
 	AgentImagePullSecretName string
+
 	// agentPodName = agentPodNamePrefix + nodeName
 	AgentPodName      string
 	AgentPodNamespace string
 	AgentPodNode      string
 	AgentPodResource  agentPodResources
-	// enable lxcfs
-	IsLxcfsEnabled bool
 
 	Flags      *genericclioptions.ConfigFlags
 	CoreClient coreclient.CoreV1Interface
@@ -184,9 +197,9 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	opts := NewDebugOptions(streams)
 
 	cmd := &cobra.Command{
-		Use:                   "debug POD [-c CONTAINER] -- COMMAND [args...]",
+		Use:                   "kubectl-debug --namespace NAMESPACE POD_NAME -c TARGET_CONTAINER_NAME",
 		DisableFlagsInUseLine: true,
-		Short:                 "Run a container in a running pod",
+		Short:                 "Launch a debug container, attached to a target container in a running pod",
 		Long:                  longDesc,
 		Example:               example,
 		Version:               version.Version(),
@@ -197,57 +210,81 @@ func NewDebugCmd(streams genericclioptions.IOStreams) *cobra.Command {
 			cmdutil.CheckErr(opts.Run())
 		},
 	}
-	//cmd.Flags().BoolVarP(&opts.RetainContainer, "retain", "r", defaultRetain,
-	//	fmt.Sprintf("Retain container after debug session closed, default to %s", defaultRetain))
+
 	cmd.Flags().StringVar(&opts.Image, "image", "",
-		fmt.Sprintf("Container Image to run the debug container, default to %s", defaultImage))
+		fmt.Sprintf("the debug container image, default: %s", defaultDebugContainerImage))
+
 	cmd.Flags().StringVar(&opts.RegistrySecretName, "registry-secret-name", "",
-		"private registry secret name, default is kubectl-debug-registry-secret")
+		fmt.Sprintf("private registry secret name, default:  %s", defaultRegistrySecretName))
+
 	cmd.Flags().StringVar(&opts.RegistrySecretNamespace, "registry-secret-namespace", "",
-		"private registry secret namespace, default is default")
+		fmt.Sprintf("private registry secret namespace, default: %s", defaultRegistrySecretNamespace))
+
 	cmd.Flags().BoolVar(&opts.RegistrySkipTLSVerify, "registry-skip-tls-verify", false,
-		"If true, the registry's certificate will not be checked for validity. This will make your HTTPS connections insecure")
+		fmt.Sprintf("if true, the registry's certificate will not be checked for validity. This will make your HTTPS connections insecure, default: %s", defaultRegistrySkipTLSVerify))
+
 	cmd.Flags().StringSliceVar(&opts.ForkPodRetainLabels, "fork-pod-retain-labels", []string{},
-		"in fork mode the pod labels retain labels name list, default is not set")
+		"list of pod labels to retain when in fork mode, default: not set")
+
 	cmd.Flags().StringVarP(&opts.ContainerName, "container", "c", "",
-		"Target container to debug, default to the first container in pod")
+		"target container to debug, defaults to the first container in target pod spec")
+
 	cmd.Flags().IntVarP(&opts.AgentPort, "port", "p", 0,
-		fmt.Sprintf("Agent port for debug cli to connect, default to %d", defaultAgentPort))
-	cmd.Flags().StringVar(&opts.ConfigLocation, "debug-config", "",
-		fmt.Sprintf("Debug config file, default to ~%s", filepath.FromSlash(defaultConfigLocation)))
+		fmt.Sprintf("debug-agent port to which kubectl-debug will connect, default: %d", defaultDebugAgentPort))
+
+	cmd.Flags().StringVar(&opts.ConfigLocation, "configfile", "",
+		fmt.Sprintf("debug-agent config file (including path), if no config file is present at the specified location then default values are used. Default: %s", filepath.FromSlash(defaultDebugAgentConfigFileLocation)))
+
 	cmd.Flags().BoolVar(&opts.Fork, "fork", false,
-		"Fork a new pod for debugging (useful if the pod status is CrashLoopBackoff)")
-	cmd.Flags().BoolVar(&opts.PortForward, portForwardFlag, true,
-		fmt.Sprintf("Whether using port-forward to connect debug-agent, default to %t", defaultPortForward))
+		"fork a new pod for debugging (useful if the pod status is CrashLoopBackoff)")
+
+	cmd.Flags().BoolVar(&opts.PortForward, "port-forward", true,
+		fmt.Sprintf("use port-forward to connect from kubectl-debug to debug-agent pod, default: %t", defaultPortForward))
+
+	// it may be that someone has already deployed a daemonset containing with the debug-agent pod and so we can use that (create-debug-agent-pod must be 'false' for this param to be used)
 	cmd.Flags().StringVar(&opts.DebugAgentDaemonSet, "daemonset-name", opts.DebugAgentDaemonSet,
-		"Debug agent daemonset name when using port-forward")
-	cmd.Flags().StringVar(&opts.DebugAgentNamespace, "daemonset-ns", opts.DebugAgentNamespace,
-		"Debug agent namespace, default to 'default'")
-	// flags used for agentless mode.
-	cmd.Flags().BoolVarP(&opts.AgentLess, agentlessFlag, "a", true,
-		fmt.Sprintf("Whether to turn on agentless mode. Agentless mode: debug target pod if there isn't an agent running on the target host, default to %t", defaultAgentless))
-	cmd.Flags().StringVar(&opts.AgentImage, "agent-image", "",
-		fmt.Sprintf("Agentless mode, the container Image to run the agent container , default to %s", defaultAgentImage))
+		fmt.Sprintf("debug agent daemonset name when using port-forward, default: %s", defaultDebugAgentDaemonSetName))
+
+	cmd.Flags().StringVar(&opts.DebugAgentNamespace, "debug-agent-namespace", opts.DebugAgentNamespace,
+		fmt.Sprintf("namespace in which to create the debug-agent pod, default: %s", defaultDebugAgentPodNamespace))
+
+	// flags used for daemonsetless, aka createDebugAgentPod mode.
+	cmd.Flags().BoolVarP(&opts.CreateDebugAgentPod, "create-debug-agent-pod", "a", true,
+		fmt.Sprintf("debug-agent pod will be automatically created on the target host, default: %t", defaultCreateDebugAgentPod))
+
+	cmd.Flags().StringVar(&opts.AgentImage, "debug-agent-image", "",
+		fmt.Sprintf("the image of the debug-agent container, default: %s", defaultDebugAgentImage))
+
 	cmd.Flags().StringVar(&opts.AgentImagePullPolicy, "agent-pull-policy", "",
-		fmt.Sprintf("Agentless mode, the container Image pull policy , default to %s", defaultAgentImagePullPolicy))
+		fmt.Sprintf("the debug-agent container image pull policy, default: %s", defaultDebugAgentImagePullPolicy))
+
 	cmd.Flags().StringVar(&opts.AgentImagePullSecretName, "agent-pull-secret-name", "",
-		fmt.Sprintf("Agentless mode, the container Image pull secret name , default to empty"))
+		fmt.Sprintf("the debug-agent container image pull secret name, default to empty"))
+
 	cmd.Flags().StringVar(&opts.AgentPodName, "agent-pod-name-prefix", "",
-		fmt.Sprintf("Agentless mode, pod name prefix , default to %s", defaultAgentPodNamePrefix))
+		fmt.Sprintf("debug-agent pod name prefix , default to %s", defaultDebugAgentPodNamePrefix))
+
 	cmd.Flags().StringVar(&opts.AgentPodNamespace, "agent-pod-namespace", "",
-		fmt.Sprintf("Agentless mode, agent pod namespace, default to %s", defaultAgentPodNamespace))
+		fmt.Sprintf("agent pod namespace, default: %s", defaultDebugAgentPodNamespace))
+
 	cmd.Flags().StringVar(&opts.AgentPodResource.CpuRequests, "agent-pod-cpu-requests", "",
-		fmt.Sprintf("Agentless mode, agent pod cpu requests, default is not set"))
+		fmt.Sprintf("agent pod cpu requests, default is not set"))
+
 	cmd.Flags().StringVar(&opts.AgentPodResource.MemoryRequests, "agent-pod-memory-requests", "",
-		fmt.Sprintf("Agentless mode, agent pod memory requests, default is not set"))
+		fmt.Sprintf("agent pod memory requests, default is not set"))
+
 	cmd.Flags().StringVar(&opts.AgentPodResource.CpuLimits, "agent-pod-cpu-limits", "",
-		fmt.Sprintf("Agentless mode, agent pod cpu limits, default is not set"))
+		fmt.Sprintf("agent pod cpu limits, default is not set"))
+
 	cmd.Flags().StringVar(&opts.AgentPodResource.MemoryLimits, "agent-pod-memory-limits", "",
-		fmt.Sprintf("Agentless mode, agent pod memory limits, default is not set"))
-	cmd.Flags().BoolVarP(&opts.IsLxcfsEnabled, enableLxcsFlag, "", true,
-		fmt.Sprintf("Enable Lxcfs, the target container can use its proc files, default to %t", defaultLxcfsEnable))
-	cmd.Flags().IntVarP(&opts.Verbosity, "verbosity ", "v", 0,
-		fmt.Sprintf("Set logging verbosity, default to %d", defaultVerbosity))
+		fmt.Sprintf("agent pod memory limits, default is not set"))
+
+	cmd.Flags().BoolVarP(&opts.IsLxcfsEnabled, "enable-lxcfs", "", true,
+		fmt.Sprintf("Enable Lxcfs, the target container can use its proc files, default: %t", defaultLxcfsEnable))
+
+	cmd.Flags().IntVarP(&opts.Verbosity, "verbosity", "v", 0,
+		fmt.Sprintf("Set logging verbosity, default: %d", defaultVerbosity))
+
 	opts.Flags.AddFlags(cmd.Flags())
 
 	return cmd
@@ -276,12 +313,11 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 
 	o.PodName = args[0]
 
-	// read defaults from config file
+	// read values from config file
 	configFile := o.ConfigLocation
 	if len(o.ConfigLocation) < 1 {
-		usr, err := user.Current()
 		if err == nil {
-			configFile = usr.HomeDir + filepath.FromSlash(defaultConfigLocation)
+			configFile = filepath.FromSlash(defaultDebugAgentConfigFileLocation)
 		}
 	}
 	config, err := LoadFile(configFile)
@@ -293,7 +329,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		config = &Config{}
 	}
 
-	// combine defaults, config file and user parameters
+	// combine hardcoded default values, configfile specified values and user cli specified values
 	o.Command = args[1:]
 	if len(o.Command) < 1 {
 		if len(config.Command) > 0 {
@@ -302,13 +338,15 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 			o.Command = []string{"bash"}
 		}
 	}
+
 	if len(o.Image) < 1 {
 		if len(config.Image) > 0 {
 			o.Image = config.Image
 		} else {
-			o.Image = defaultImage
+			o.Image = defaultDebugContainerImage
 		}
 	}
+
 	if len(o.RegistrySecretName) < 1 {
 		if len(config.RegistrySecretName) > 0 {
 			o.RegistrySecretName = config.RegistrySecretName
@@ -316,6 +354,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 			o.RegistrySecretName = defaultRegistrySecretName
 		}
 	}
+
 	if len(o.RegistrySecretNamespace) < 1 {
 		if len(config.RegistrySecretNamespace) > 0 {
 			o.RegistrySecretNamespace = config.RegistrySecretNamespace
@@ -323,6 +362,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 			o.RegistrySecretNamespace = defaultRegistrySecretNamespace
 		}
 	}
+
 	if !o.RegistrySkipTLSVerify {
 		if config.RegistrySkipTLSVerify {
 			o.RegistrySkipTLSVerify = config.RegistrySkipTLSVerify
@@ -330,16 +370,106 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 			o.RegistrySkipTLSVerify = defaultRegistrySkipTLSVerify
 		}
 	}
+
 	if len(o.ForkPodRetainLabels) < 1 {
 		if len(config.ForkPodRetainLabels) > 0 {
 			o.ForkPodRetainLabels = config.ForkPodRetainLabels
 		}
 	}
+
 	if o.AgentPort < 1 {
 		if config.AgentPort > 0 {
 			o.AgentPort = config.AgentPort
 		} else {
-			o.AgentPort = defaultAgentPort
+			o.AgentPort = defaultDebugAgentPort
+		}
+	}
+
+	if len(o.DebugAgentNamespace) < 1 {
+		if len(config.DebugAgentNamespace) > 0 {
+			o.DebugAgentNamespace = config.DebugAgentNamespace
+		} else {
+			o.DebugAgentNamespace = defaultDebugAgentPodNamespace
+		}
+	}
+
+	if len(o.DebugAgentDaemonSet) < 1 {
+		if len(config.DebugAgentDaemonSet) > 0 {
+			o.DebugAgentDaemonSet = config.DebugAgentDaemonSet
+		} else {
+			o.DebugAgentDaemonSet = defaultDebugAgentDaemonSetName
+		}
+	}
+
+	if len(o.AgentPodName) < 1 {
+		if len(config.AgentPodNamePrefix) > 0 {
+			o.AgentPodName = config.AgentPodNamePrefix
+		} else {
+			o.AgentPodName = defaultDebugAgentPodNamePrefix
+		}
+	}
+
+	if len(o.AgentImage) < 1 {
+		if len(config.AgentImage) > 0 {
+			o.AgentImage = config.AgentImage
+		} else {
+			o.AgentImage = defaultDebugAgentImage
+		}
+	}
+
+	if len(o.AgentImagePullPolicy) < 1 {
+		if len(config.AgentImagePullPolicy) > 0 {
+			o.AgentImagePullPolicy = config.AgentImagePullPolicy
+		} else {
+			o.AgentImagePullPolicy = defaultDebugAgentImagePullPolicy
+		}
+	}
+
+	if len(o.AgentImagePullSecretName) < 1 {
+		if len(config.AgentImagePullSecretName) > 0 {
+			o.AgentImagePullSecretName = config.AgentImagePullSecretName
+		} else {
+			o.AgentImagePullSecretName = defaultDebugAgentImagePullSecretName
+		}
+	}
+
+	if len(o.AgentPodNamespace) < 1 {
+		if len(config.AgentPodNamespace) > 0 {
+			o.AgentPodNamespace = config.AgentPodNamespace
+		} else {
+			o.AgentPodNamespace = defaultDebugAgentPodNamespace
+		}
+	}
+
+	if len(o.AgentPodResource.CpuRequests) < 1 {
+		if len(config.AgentPodCpuRequests) > 0 {
+			o.AgentPodResource.CpuRequests = config.AgentPodCpuRequests
+		} else {
+			o.AgentPodResource.CpuRequests = defaultDebugAgentPodCpuRequests
+		}
+	}
+
+	if len(o.AgentPodResource.MemoryRequests) < 1 {
+		if len(config.AgentPodMemoryRequests) > 0 {
+			o.AgentPodResource.MemoryRequests = config.AgentPodMemoryRequests
+		} else {
+			o.AgentPodResource.MemoryRequests = defaultDebugAgentPodMemoryRequests
+		}
+	}
+
+	if len(o.AgentPodResource.CpuLimits) < 1 {
+		if len(config.AgentPodCpuLimits) > 0 {
+			o.AgentPodResource.CpuLimits = config.AgentPodCpuLimits
+		} else {
+			o.AgentPodResource.CpuLimits = defaultDebugAgentPodCpuLimits
+		}
+	}
+
+	if len(o.AgentPodResource.MemoryLimits) < 1 {
+		if len(config.AgentPodMemoryLimits) > 0 {
+			o.AgentPodResource.MemoryLimits = config.AgentPodMemoryLimits
+		} else {
+			o.AgentPodResource.MemoryLimits = defaultDebugAgentPodMemoryLimits
 		}
 	}
 
@@ -351,103 +481,28 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		}
 	}
 
-	if len(o.DebugAgentNamespace) < 1 {
-		if len(config.DebugAgentNamespace) > 0 {
-			o.DebugAgentNamespace = config.DebugAgentNamespace
+	if !o.IsLxcfsEnabled {
+		if config.IsLxcfsEnabled {
+			o.IsLxcfsEnabled = config.IsLxcfsEnabled
 		} else {
-			o.DebugAgentNamespace = defaultDaemonSetNs
-		}
-	}
-	if len(o.DebugAgentDaemonSet) < 1 {
-		if len(config.DebugAgentDaemonSet) > 0 {
-			o.DebugAgentDaemonSet = config.DebugAgentDaemonSet
-		} else {
-			o.DebugAgentDaemonSet = defaultDaemonSetName
+			o.IsLxcfsEnabled = defaultLxcfsEnable
 		}
 	}
 
-	if len(o.AgentPodName) < 1 {
-		if len(config.AgentPodNamePrefix) > 0 {
-			o.AgentPodName = config.AgentPodNamePrefix
+	if !o.CreateDebugAgentPod {
+		if config.CreateDebugAgentPod {
+			o.CreateDebugAgentPod = config.CreateDebugAgentPod
 		} else {
-			o.AgentPodName = defaultAgentPodNamePrefix
+			o.CreateDebugAgentPod = defaultCreateDebugAgentPod
 		}
 	}
 
-	if len(o.AgentImage) < 1 {
-		if len(config.AgentImage) > 0 {
-			o.AgentImage = config.AgentImage
+	if !o.PortForward {
+		if config.PortForward {
+			o.PortForward = config.PortForward
 		} else {
-			o.AgentImage = defaultAgentImage
+			o.PortForward = defaultPortForward
 		}
-	}
-
-	if len(o.AgentImagePullPolicy) < 1 {
-		if len(config.AgentImagePullPolicy) > 0 {
-			o.AgentImagePullPolicy = config.AgentImagePullPolicy
-		} else {
-			o.AgentImagePullPolicy = defaultAgentImagePullPolicy
-		}
-	}
-
-	if len(o.AgentImagePullSecretName) < 1 {
-		if len(config.AgentImagePullSecretName) > 0 {
-			o.AgentImagePullSecretName = config.AgentImagePullSecretName
-		} else {
-			o.AgentImagePullSecretName = defaultAgentImagePullSecretName
-		}
-	}
-
-	if len(o.AgentPodNamespace) < 1 {
-		if len(config.AgentPodNamespace) > 0 {
-			o.AgentPodNamespace = config.AgentPodNamespace
-		} else {
-			o.AgentPodNamespace = defaultAgentPodNamespace
-		}
-	}
-
-	if len(o.AgentPodResource.CpuRequests) < 1 {
-		if len(config.AgentPodCpuRequests) > 0 {
-			o.AgentPodResource.CpuRequests = config.AgentPodCpuRequests
-		} else {
-			o.AgentPodResource.CpuRequests = defaultAgentPodCpuRequests
-		}
-	}
-
-	if len(o.AgentPodResource.MemoryRequests) < 1 {
-		if len(config.AgentPodMemoryRequests) > 0 {
-			o.AgentPodResource.MemoryRequests = config.AgentPodMemoryRequests
-		} else {
-			o.AgentPodResource.MemoryRequests = defaultAgentPodMemoryRequests
-		}
-	}
-
-	if len(o.AgentPodResource.CpuLimits) < 1 {
-		if len(config.AgentPodCpuLimits) > 0 {
-			o.AgentPodResource.CpuLimits = config.AgentPodCpuLimits
-		} else {
-			o.AgentPodResource.CpuLimits = defaultAgentPodCpuLimits
-		}
-	}
-
-	if len(o.AgentPodResource.MemoryLimits) < 1 {
-		if len(config.AgentPodMemoryLimits) > 0 {
-			o.AgentPodResource.MemoryLimits = config.AgentPodMemoryLimits
-		} else {
-			o.AgentPodResource.MemoryLimits = defaultAgentPodMemoryLimits
-		}
-	}
-
-	if !cmd.Flag(enableLxcsFlag).Changed {
-		o.IsLxcfsEnabled = config.IsLxcfsEnabled
-	}
-
-	if !cmd.Flag(portForwardFlag).Changed {
-		o.PortForward = config.PortForward
-	}
-
-	if !cmd.Flag(agentlessFlag).Changed {
-		o.AgentLess = config.Agentless
 	}
 
 	o.Ports = []string{strconv.Itoa(o.AgentPort)}
@@ -477,13 +532,13 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 		if o.Flags.Context != nil && len(*o.Flags.Context) > 0 {
 			// --context : "The name of the kubeconfig context to use"
 			cfgCtxt = rwCfg.Contexts[*o.Flags.Context]
-			log.Printf("Getting user name from context '%v' received from switch --context\r\n", *o.Flags.Context)
+			log.Printf("Getting user name from kubectl context '%v' received from switch --context\r\n", *o.Flags.Context)
 		} else {
 			cfgCtxt = rwCfg.Contexts[rwCfg.CurrentContext]
-			log.Printf("Getting user name from default context '%v'\r\n", rwCfg.CurrentContext)
+			log.Printf("Getting user name from default kubectl context '%v'\r\n", rwCfg.CurrentContext)
 		}
 		o.UserName = cfgCtxt.AuthInfo
-		log.Printf("User name '%v' received from context\r\n", o.UserName)
+		log.Printf("User name '%v' received from kubectl context\r\n", o.UserName)
 	}
 
 	clientset, err := kubernetes.NewForConfig(o.Config)
@@ -500,7 +555,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, args []string, argsLenAtDash
 // Validate validate
 func (o *DebugOptions) Validate() error {
 	if len(o.PodName) == 0 {
-		return fmt.Errorf("pod name must be specified")
+		return fmt.Errorf("target pod name must be specified")
 	}
 	if len(o.Command) == 0 {
 		return fmt.Errorf("you must specify at least one command for the container")
@@ -513,13 +568,14 @@ func (o *DebugOptions) Validate() error {
 func (o *DebugOptions) Run() error {
 	pod, err := o.CoreClient.Pods(o.Namespace).Get(o.PodName, v1.GetOptions{})
 	if err != nil {
+		o.Logger.Printf("error with pod spec")
 		return err
 	}
 
 	containerName := o.ContainerName
 	if len(containerName) == 0 {
 		if len(pod.Spec.Containers) > 1 {
-			usageString := fmt.Sprintf("Defaulting container name to %s.", pod.Spec.Containers[0].Name)
+			usageString := fmt.Sprintf("No container name specified, choosing container: %s.", pod.Spec.Containers[0].Name)
 			fmt.Fprintf(o.ErrOut, "%s\n\r", usageString)
 		}
 		containerName = pod.Spec.Containers[0].Name
@@ -528,15 +584,15 @@ func (o *DebugOptions) Run() error {
 	if err != nil {
 		return err
 	}
-	// Launch debug launching pod in agentless mode.
+	// Launch debug launching pod in createDebugAgentPod mode.
 	var agentPod *corev1.Pod
-	if o.AgentLess {
+	if o.CreateDebugAgentPod {
 		o.AgentPodNode = pod.Spec.NodeName
 		o.AgentPodName = fmt.Sprintf("%s-%s", o.AgentPodName, uuid.NewUUID())
 		agentPod = o.getAgentPod()
 		agentPod, err = o.launchPod(agentPod)
 		if err != nil {
-			fmt.Fprintf(o.Out, "the agentPod is not running, you should check the reason and delete the failed agentPod and retry.\n")
+			fmt.Fprintf(o.Out, "the debug-agent pod is not running, you should check the reason, delete any failed debug-agent pod(s) and retry.\r\n")
 			return err
 		}
 	}
@@ -546,12 +602,13 @@ func (o *DebugOptions) Run() error {
 	// which keeps the container running.
 	if o.Fork {
 		// build the fork pod labels
+		fmt.Fprintf(o.Out, "Forked mode selected\n")
 		podLabels := o.buildForkPodLabels(pod)
 		// copy pod and run
 		pod = copyAndStripPod(pod, containerName, podLabels)
 		pod, err = o.launchPod(pod)
 		if err != nil {
-			fmt.Fprintf(o.Out, "the ForkedPod is not running, you should check the reason and delete the failed ForkedPod and retry\n")
+			fmt.Fprintf(o.Out, "the ForkedPod is not running, you should check the reason and delete the failed ForkedPod and retry\r\n")
 			o.deleteAgent(agentPod)
 			return err
 		}
@@ -559,11 +616,12 @@ func (o *DebugOptions) Run() error {
 
 	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
 		o.deleteAgent(agentPod)
-		return fmt.Errorf("cannot debug in a completed pod; current phase is %s", pod.Status.Phase)
+		return fmt.Errorf("cannot debug in a completed pod; current pod phase is %s", pod.Status.Phase)
 	}
 
 	containerID, err := o.getContainerIDByName(pod, containerName)
 	if err != nil {
+		fmt.Fprintf(o.Out, "an error occured, pod is %s, container name is: %s . Will clean up and exit.\r\n", pod, containerName)
 		o.deleteAgent(agentPod)
 		return err
 	}
@@ -580,11 +638,10 @@ func (o *DebugOptions) Run() error {
 
 	if o.PortForward {
 		var agent *corev1.Pod
-		if !o.AgentLess {
-			// Agent is running
-			if o.Verbosity > 0 {
-				o.Logger.Printf("Fetching daemonset '%v' from namespace %v\r\n", o.DebugAgentDaemonSet, o.DebugAgentNamespace)
-			}
+		if !o.CreateDebugAgentPod {
+			// See if there is a debug-agent pod running as a daemonset
+			o.Logger.Printf("See if there is a debug-agent pod running in a daemonset. daemonset '%v' from namespace %v\r\n", o.DebugAgentDaemonSet, o.DebugAgentNamespace)
+
 			daemonSet, err := o.KubeCli.AppsV1().DaemonSets(o.DebugAgentNamespace).Get(o.DebugAgentDaemonSet, v1.GetOptions{})
 			if err != nil {
 				return err
@@ -607,13 +664,14 @@ func (o *DebugOptions) Run() error {
 		}
 
 		if agent == nil {
-			return fmt.Errorf("there is no agent pod in the same node with your specified pod %s", o.PodName)
+			return fmt.Errorf("there is no debug-agent pod running on the same node as your target pod %s\r\n", o.PodName)
 		}
 		if o.Verbosity > 0 {
-			fmt.Fprintf(o.Out, "pod %s PodIP %s, agentPodIP %s\n", o.PodName, pod.Status.PodIP, agent.Status.HostIP)
+			fmt.Fprintf(o.Out, "target pod: %s target pod IP: %s, debug-agent pod IP: %s\r\n", o.PodName, pod.Status.PodIP, agent.Status.HostIP)
 		}
 		err = o.runPortForward(agent)
 		if err != nil {
+			fmt.Fprintf(o.Out, "an error has occured, will delete debug-agent pod and exit\r\n")
 			o.deleteAgent(agentPod)
 			return err
 		}
@@ -622,7 +680,7 @@ func (o *DebugOptions) Run() error {
 		// on specified ports in localhost, the ports can not access until receive the
 		// ready signal
 		if o.Verbosity > 0 {
-			fmt.Fprintln(o.Out, "wait for forward port to debug agent ready...")
+			fmt.Fprintln(o.Out, "using port-forwarding. Waiting for port-forward connection with debug-agent...\r\n")
 		}
 		<-o.ReadyChannel
 	}
@@ -637,6 +695,7 @@ func (o *DebugOptions) Run() error {
 		}
 		uri, err := url.Parse(fmt.Sprintf("http://%s:%d", targetHost, o.AgentPort))
 		if err != nil {
+			o.Logger.Printf("error parsing url http://%s:%d", targetHost, o.AgentPort)
 			return err
 		}
 		uri.Path = fmt.Sprintf("/api/v1/debug")
@@ -662,7 +721,7 @@ func (o *DebugOptions) Run() error {
 		if err != nil {
 			if errors.IsNotFound(err) {
 				if o.Verbosity > 0 {
-					o.Logger.Printf("Secret %v not found in namespace %v\r\n", o.RegistrySecretName, o.RegistrySecretNamespace)
+					o.Logger.Printf("Secret: %v not found in namespace: %v\r\n", o.RegistrySecretName, o.RegistrySecretNamespace)
 				}
 				authStr = ""
 			} else {
@@ -670,7 +729,7 @@ func (o *DebugOptions) Run() error {
 			}
 		} else {
 			if o.Verbosity > 1 {
-				o.Logger.Printf("Found secret %v:%v\r\n", o.RegistrySecretNamespace, o.RegistrySecretName)
+				o.Logger.Printf("Found secret: %v:%v\r\n", o.RegistrySecretNamespace, o.RegistrySecretName)
 			}
 			authStr, _ = o.extractSecret(registrySecret.Data)
 		}
@@ -684,15 +743,15 @@ func (o *DebugOptions) Run() error {
 		return o.remoteExecute("POST", uri, o.Config, o.In, o.Out, o.ErrOut, t.Raw, sizeQueue)
 	}
 
-	// ensure forked pod is deleted on cancelation
+	// ensure debug pod is deleted
 	withCleanUp := func() error {
 		return interrupt.Chain(nil, func() {
 			if o.Fork {
-				fmt.Fprintf(o.Out, "Start deleting forked pod %s \n\r", pod.Name)
+				fmt.Fprintf(o.Out, "deleting forked pod: %s \n\r", pod.Name)
 				err := o.CoreClient.Pods(pod.Namespace).Delete(pod.Name, v1.NewDeleteOptions(0))
 				if err != nil {
-					// we may leak pod here, but we have nothing to do except noticing the user
-					fmt.Fprintf(o.ErrOut, "failed to delete forked pod[Name:%s, Namespace:%s], consider manual deletion.\n\r", pod.Name, pod.Namespace)
+					// we may leak pod here, but we have nothing to do except notify the user
+					fmt.Fprintf(o.ErrOut, "failed to delete forked pod: %s Namespace: %s, you may have to manually delete the pod.\n\r", pod.Name, pod.Namespace)
 				}
 			}
 
@@ -703,15 +762,15 @@ func (o *DebugOptions) Run() error {
 				}
 			}
 			// delete agent pod
-			if o.AgentLess && agentPod != nil {
-				fmt.Fprintf(o.Out, "Start deleting agent pod %s \n\r", pod.Name)
+			if o.CreateDebugAgentPod && agentPod != nil {
+				fmt.Fprintf(o.Out, "\n\rdeleting debug-agent pod\n\r")
 				o.deleteAgent(agentPod)
 			}
 		}).Run(fn)
 	}
 
 	if err := t.Safe(withCleanUp); err != nil {
-		fmt.Fprintf(o.Out, "error execute remote, %v\n", err)
+		fmt.Fprintf(o.Out, "an error occured executing remote command(s), %v\r\n", err)
 		return err
 	}
 	o.wait.Wait()
@@ -828,7 +887,7 @@ func (o *DebugOptions) setupTTY() term.TTY {
 	t.Raw = true
 	if !t.IsTerminalIn() {
 		if o.ErrOut != nil {
-			fmt.Fprintln(o.ErrOut, "Unable to use a TTY - input is not a terminal or the right kind of file")
+			fmt.Fprintln(o.ErrOut, "Unable to use a TTY - input is not a terminal or the right kind of file\r\n")
 		}
 		return t
 	}
@@ -888,11 +947,13 @@ func copyAndStripPod(pod *corev1.Pod, targetContainer string, podLabels map[stri
 func (o *DebugOptions) launchPod(pod *corev1.Pod) (*corev1.Pod, error) {
 	pod, err := o.CoreClient.Pods(pod.Namespace).Create(pod)
 	if err != nil {
+		o.Logger.Printf("error with launch pod")
 		return pod, err
 	}
 
 	watcher, err := o.CoreClient.Pods(pod.Namespace).Watch(v1.SingleObject(pod.ObjectMeta))
 	if err != nil {
+		o.Logger.Printf("error with watching pod")
 		return nil, err
 	}
 	// FIXME: hard code -> config
@@ -901,14 +962,14 @@ func (o *DebugOptions) launchPod(pod *corev1.Pod) (*corev1.Pod, error) {
 	fmt.Fprintf(o.Out, "Waiting for pod %s to run...\n", pod.Name)
 	event, err := watch.UntilWithoutRetry(ctx, watcher, conditions.PodRunning)
 	if err != nil {
-		fmt.Fprintf(o.ErrOut, "Error occurred while waiting for pod to run:  %v\n", err)
+		fmt.Fprintf(o.ErrOut, "Error occurred while waiting for pod to run:  %v\r\n", err)
 		return nil, err
 	}
 	pod = event.Object.(*corev1.Pod)
 	return pod, nil
 }
 
-// getAgentPod construnct agentPod from agent pod template
+// getAgentPod construct debug-agent pod template
 func (o *DebugOptions) getAgentPod() *corev1.Pod {
 	prop := corev1.MountPropagationBidirectional
 	directoryCreate := corev1.HostPathDirectoryOrCreate
@@ -961,10 +1022,14 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 							Name:      "cgroup",
 							MountPath: "/sys/fs/cgroup",
 						},
-						// containerd client will need to access /var/data, /run/containerd and /run/runc
+						// containerd client needs to access /var/data, /run/containerd, /var/lib/containerd and /run/runc
 						{
 							Name:      "vardata",
 							MountPath: "/var/data",
+						},
+						{
+							Name:      "varlibcontainerd",
+							MountPath: "/var/lib/containerd",
 						},
 						{
 							Name:      "runcontainerd",
@@ -1032,6 +1097,14 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 					},
 				},
 				{
+					Name: "varlibcontainerd",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: "/var/lib/containerd",
+						},
+					},
+				},
+				{
 					Name: "runrunc",
 					VolumeSource: corev1.VolumeSource{
 						HostPath: &corev1.HostPathVolumeSource{
@@ -1049,7 +1122,7 @@ func (o *DebugOptions) getAgentPod() *corev1.Pod {
 
 func (o *DebugOptions) runPortForward(pod *corev1.Pod) error {
 	if pod.Status.Phase != corev1.PodRunning {
-		return fmt.Errorf("unable to forward port because pod is not running. Current status=%v", pod.Status.Phase)
+		return fmt.Errorf("unable to forward port because pod is not running. Current status=%v\r\n", pod.Status.Phase)
 	}
 	o.wait.Add(1)
 	go func() {
@@ -1084,11 +1157,13 @@ type defaultPortForwarder struct {
 func (f *defaultPortForwarder) ForwardPorts(method string, url *url.URL, opts *DebugOptions) error {
 	transport, upgrader, err := spdy.RoundTripperFor(opts.Config)
 	if err != nil {
+		opts.Logger.Printf("error with setting up spdy forwarder")
 		return err
 	}
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, method, url)
 	fw, err := portforward.New(dialer, opts.Ports, opts.StopChannel, opts.ReadyChannel, f.Out, f.ErrOut)
 	if err != nil {
+		opts.Logger.Printf("error with NewDialer")
 		return err
 	}
 	return fw.ForwardPorts()
@@ -1111,7 +1186,7 @@ func (o *DebugOptions) auth(pod *corev1.Pod) error {
 	}
 	response, err := sarClient.SelfSubjectAccessReviews().Create(sar)
 	if err != nil {
-		fmt.Fprintf(o.ErrOut, "Failed to create SelfSubjectAccessReview: %v \n", err)
+		fmt.Fprintf(o.ErrOut, "Failed to create SelfSubjectAccessReview: %v \r\n", err)
 		return err
 	}
 	if !response.Status.Allowed {
@@ -1129,17 +1204,17 @@ func (o *DebugOptions) auth(pod *corev1.Pod) error {
 
 // delete the agent pod
 func (o *DebugOptions) deleteAgent(agentPod *corev1.Pod) {
-	// only with agentless flag we can delete the agent pod
-	if !o.AgentLess {
+	// only if createDebugAgentPod=true should we manage the debug-agent pod
+	if !o.CreateDebugAgentPod {
 		return
 	}
 	err := o.CoreClient.Pods(agentPod.Namespace).Delete(agentPod.Name, v1.NewDeleteOptions(0))
 	if err != nil {
-		fmt.Fprintf(o.ErrOut, "failed to delete agent pod[Name:%s, Namespace: %s], consider manual deletion.\nerror msg: %v", agentPod.Name, agentPod.Namespace, err)
+		fmt.Fprintf(o.ErrOut, "failed to delete agent pod[Name:%s, Namespace: %s], consider manual deletion.\r\nerror msg: %v", agentPod.Name, agentPod.Namespace, err)
 	}
 }
 
-// build the agent pod Resource Requirements
+// build the debug-agent pod Resource Requirements
 func (o *DebugOptions) buildAgentResourceRequirements() corev1.ResourceRequirements {
 	return getResourceRequirements(getResourceList(o.AgentPodResource.CpuRequests, o.AgentPodResource.MemoryRequests), getResourceList(o.AgentPodResource.CpuLimits, o.AgentPodResource.MemoryLimits))
 }

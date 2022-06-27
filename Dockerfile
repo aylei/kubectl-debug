@@ -1,8 +1,8 @@
-FROM alpine:3.11.5 as build
+FROM alpine:3.15.0 as build
 
 RUN apk add lxcfs containerd 
 
-FROM alpine:3.11.5
+FROM alpine:3.15.0
 
 COPY --from=build /usr/bin/lxcfs /usr/bin/lxcfs
 COPY --from=build /usr/lib/*fuse* /usr/lib/

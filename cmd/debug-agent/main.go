@@ -2,9 +2,8 @@ package main
 
 import (
 	"flag"
+	"github.com/jamestgrant/kubectl-debug/pkg/debug-agent"
 	"log"
-
-	"github.com/aylei/kubectl-debug/pkg/agent"
 )
 
 func main() {
@@ -13,12 +12,12 @@ func main() {
 	flag.StringVar(&configFile, "config.file", "", "Config file location.")
 	flag.Parse()
 
-	config, err := agent.LoadFile(configFile)
+	config, err := debugagent.LoadFile(configFile)
 	if err != nil {
 		log.Fatalf("error reading config %v", err)
 	}
 
-	server, err := agent.NewServer(config)
+	server, err := debugagent.NewServer(config)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -27,5 +26,5 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Println("sever stopped, see you next time!")
+	log.Println("server stopped, see you next time!")
 }

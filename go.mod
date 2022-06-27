@@ -1,4 +1,4 @@
-module github.com/aylei/kubectl-debug
+module github.com/jamestgrant/kubectl-debug
 
 go 1.12
 
@@ -64,6 +64,7 @@ require (
 	github.com/prometheus/client_model v0.0.0-20180712105110-5c3871d89910
 	github.com/prometheus/common v0.0.0-20181218105931-67670fe90761
 	github.com/prometheus/procfs v0.0.0-20181204211112-1dc9a6cbc91a
+	github.com/rs/xid v1.3.0
 	github.com/russross/blackfriday v0.0.0-20151117072312-300106c228d5
 	github.com/shurcooL/sanitized_anchor_name v1.0.0
 	github.com/sirupsen/logrus v1.4.2
