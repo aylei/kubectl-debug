@@ -130,7 +130,7 @@ make agent-docker
 
 # port-forward 模式和 agentless 模式(默认开启)
 
-- `port-foward`模式：默认情况下，`kubectl-debug`会直接与目标宿主机建立连接。当`kubectl-debug`无法与目标宿主机直连时，可以开启`port-forward`模式。`port-forward`模式下，本机会监听localhost:agentPort，并将数据转发至目标Pod的agentPort端口。
+- `port-forward`模式：默认情况下，`kubectl-debug`会直接与目标宿主机建立连接。当`kubectl-debug`无法与目标宿主机直连时，可以开启`port-forward`模式。`port-forward`模式下，本机会监听localhost:agentPort，并将数据转发至目标Pod的agentPort端口。
 
 - `agentless`模式： 默认情况下，`debug-agent`需要预先部署在集群每个节点上，会一直消耗集群资源，然而调试 Pod 是低频操作。为避免集群资源损失，在[#31](https://github.com/aylei/kubectl-debug/pull/31)增加了`agentless`模式。`agentless`模式下，`kubectl-debug`会先在目标Pod所在宿主机上启动`debug-agent`，然后再启动调试容器。用户调试结束后，`kubectl-debug`会依次删除调试容器和在目的主机启动的`debug-agent`。
 
